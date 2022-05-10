@@ -31,6 +31,7 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	istionetworking "istio.io/istio/pilot/pkg/networking"
 	istioroute "istio.io/istio/pilot/pkg/networking/core/v1alpha3/route"
+	"istio.io/istio/pilot/pkg/networking/core/v1alpha3/tunnelingconfig"
 	"istio.io/istio/pilot/pkg/networking/telemetry"
 	"istio.io/istio/pilot/pkg/networking/util"
 	xdsfilters "istio.io/istio/pilot/pkg/xds/filters"
@@ -81,7 +82,7 @@ func setAccessLogAndBuildTCPFilter(push *model.PushContext, node *model.Proxy, c
 // buildOutboundNetworkFiltersWithSingleDestination takes a single cluster name
 // and builds a stack of network filters.
 func buildOutboundNetworkFiltersWithSingleDestination(push *model.PushContext, node *model.Proxy,
-	statPrefix, clusterName, subsetName string, port *model.Port, destinationRule *networking.DestinationRule,
+	statPrefix, clusterName, subsetName string, port *model.Port, destinationRule *networking.DestinationRule, tunnelingConfigBuilder tunnelingconfig.BuilderFunc,
 ) []*listener.Filter {
 	tcpProxy := &tcp.TcpProxy{
 		StatPrefix:       statPrefix,
@@ -93,6 +94,7 @@ func buildOutboundNetworkFiltersWithSingleDestination(push *model.PushContext, n
 		tcpProxy.IdleTimeout = durationpb.New(idleTimeout)
 	}
 	maybeSetHashPolicy(destinationRule, tcpProxy, subsetName)
+	tunnelingConfigBuilder(tcpProxy, destinationRule, subsetName)
 	class := model.OutboundListenerClass(node.Type)
 	tcpFilter := setAccessLogAndBuildTCPFilter(push, node, tcpProxy, class)
 
@@ -227,7 +229,8 @@ func buildOutboundNetworkFilters(node *model.Proxy,
 				routes[0].Destination.Subset, port, &service.Attributes)
 		}
 
-		return buildOutboundNetworkFiltersWithSingleDestination(push, node, statPrefix, clusterName, routes[0].Destination.Subset, port, destinationRule)
+		return buildOutboundNetworkFiltersWithSingleDestination(
+			push, node, statPrefix, clusterName, routes[0].Destination.Subset, port, destinationRule, tunnelingconfig.Builder)
 	}
 	return buildOutboundNetworkFiltersWithWeightedClusters(node, routes, push, port, configMeta, destinationRule)
 }
@@ -255,7 +258,8 @@ func buildMongoFilter(statPrefix string) *listener.Filter {
 func buildOutboundAutoPassthroughFilterStack(push *model.PushContext, node *model.Proxy, port *model.Port) []*listener.Filter {
 	// First build tcp with access logs
 	// then add sni_cluster to the front
-	tcpProxy := buildOutboundNetworkFiltersWithSingleDestination(push, node, util.BlackHoleCluster, util.BlackHoleCluster, "", port, nil)
+	tcpProxy := buildOutboundNetworkFiltersWithSingleDestination(push, node, util.BlackHoleCluster, util.BlackHoleCluster,
+		"", port, nil, tunnelingconfig.NilBuilder)
 	filterstack := make([]*listener.Filter, 0)
 	filterstack = append(filterstack, &listener.Filter{
 		Name: util.SniClusterFilter,

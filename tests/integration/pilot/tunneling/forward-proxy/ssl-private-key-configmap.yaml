@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: external-forward-proxy-ssl-private-key
+data:
+  external-forward-proxy.testdomain.key: |-
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDRgx1O9Dchb2fq
+    CL8bGraDuxqn3jZBTwiZiVIT0Tc3G3VOnkn2Vttd+y4X01V9pByz33JyymQeKs8d
+    7IZ5BkSjXv9DXEIS0iy8rHcfcckk8RH4zZEsDjhcyW7kOo+l3ghesbBF4tKX+DO1
+    uO7a8051slXxJbUyt9BRbxSF33v8kLefWVDf29TsYp6RXlzjDc3zzhln9i8ae7UY
+    Gh5+qDrDr6q+lZlsqUhDkvDDGR1yM3OQionpRG3yKF3jXTLW7iKXEyK9KAUSMFq3
+    8r04rlrC5MtY3S4nOJkv3slbsVOyHq2bB3q4PS+JrJ7DAE8s/+dWVYD1JmacNWF+
+    InH+W7wpAgMBAAECggEATAsl2SFk3TrdYaGZE5Jninqf2ywZTy0LdwbThqPaQaMy
+    ub1UJRgzePIRMc6f6gFl9Zd1p9pz6kspb7gIuuaehRmW1vEmfkRQvo5ukjgvhLwH
+    BOI//diPdoYaPLZQqyhiq1QdIdCJFWWeByg/cbL72FZJQUSpduYms1f4//o0u193
+    RFbos5PhD7h6sZYDzufIcDAnY8Zt+YTbpKPv4lCdfHuuN9s2ptpvw2Q5KMWswOOU
+    hk5h7p3bqdXWIFu/BoEj0f+jwTHsp58+oIWhNafvfhQd210jQe9ScGSGJmNm0c0L
+    CLfbdwJKPXcjmD3/yzYJuzOHsPMf4EJYO6PROoxucQKBgQDuuY0+Gre66a3dQUE7
+    6P45v7Dai9ZwTkaQ4YqCw7g96pS1zs/CqDg2CP/23luEQgyOCi0+E7GedUuZCq3n
+    8AK5InhqtCrMZt3oO3+ePXH+vtTI6+mz9BKuBjLKCccDeXIOe7HNTgOajeNIupdU
+    qeVApWZn2Jy9C2W2H3XWZ2V/xQKBgQDgrGPJj3w8q0oxvqfAke4uH+WAgoqjUog8
+    CQUaqt04eDCoE/5gwmKZprOv75R1rXaTSBAr/++I0NhV19t/3uvnS9JO5rGLF0SP
+    snvc4IMANBvvRkWYy7/mXazUuWYC+qG+Jv+e+/rTM8yutYjuW/8DtMMzR6nt5AAg
+    T9UpPNJNFQKBgQCmy2JSSByjLe5aruNDVrF56+NHb3jukuJfDBbY8qLiL+qjdNJY
+    sWxE5Njixc2vhO58t8OQofXyPwYI8hs7+MgOTnVQKH3WvvDA+AFcsJXbZb4KfDqX
+    jysWCCKoY1h3pvz3/ZjnV2DRNd3dzPE7KFGTb30zhXdN5o60RxrwKOIT+QKBgFx+
+    G8aKz3aafbzk5GKesRNEBlNVaoW6IGO2wucrmE77C+zl7j8fR0BCJI81bkTT2JDh
+    hebXQmFsuOL+LlsCBtP9nuLkjgrY1Vzi+aMAum2HBkkHAPfaSXIo9lHM0XZAf/2s
+    SGfHDIeON6FlEq4uKVn5PLMLuaU5y+OBehuz8k/RAoGAehwSV1XXgM8nRg8O1YhL
+    fY6wBAgvaXOk1tH+pKCJIIhducOoU2YBzx51Hr6bNmVOZ9KN+DFvu5sJ72KNq9KS
+    9IFKJwhvO/17MSjSJ/tDv56sMCV+MPmnB19o8CzbF4jKNA6xhFzlyKLfS47d5wMu
+    mNdGfHG80hwSFdwJMLAw2tQ=
+    -----END PRIVATE KEY-----

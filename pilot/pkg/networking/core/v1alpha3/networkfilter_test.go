@@ -27,6 +27,7 @@ import (
 
 	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/model"
+	"istio.io/istio/pilot/pkg/networking/core/v1alpha3/tunnelingconfig"
 	"istio.io/istio/pilot/pkg/networking/telemetry"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/mesh"
@@ -142,6 +143,136 @@ func TestInboundNetworkFilterIdleTimeout(t *testing.T) {
 			listenerFilters[len(listenerFilters)-1].GetTypedConfig().UnmarshalTo(tcp)
 			if !reflect.DeepEqual(tcp.IdleTimeout, tt.expected) {
 				t.Fatalf("Unexpected IdleTimeout, Expecting %s, Got %s", tt.expected, tcp.IdleTimeout)
+			}
+		})
+	}
+}
+
+func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *testing.T) {
+	type tunnelingConfig struct {
+		hostname string
+		usePost  bool
+	}
+
+	tunnelingEnabled := &networking.DestinationRule{
+		Host: "tunnel-proxy.com",
+		TrafficPolicy: &networking.TrafficPolicy{
+			Tunnel: &networking.TrafficPolicy_TunnelSettings{
+				Protocol:   "connect",
+				TargetHost: "example.com",
+				TargetPort: 8443,
+			},
+		},
+	}
+	tunnelingEnabledForSubset := &networking.DestinationRule{
+		Host: "tunnel-proxy.com",
+		Subsets: []*networking.Subset{
+			{
+				Name: "example-com-8443",
+				TrafficPolicy: &networking.TrafficPolicy{
+					Tunnel: &networking.TrafficPolicy_TunnelSettings{
+						Protocol:   "post",
+						TargetHost: "example.com",
+						TargetPort: 8443,
+					},
+				},
+			},
+		},
+	}
+
+	testCases := []struct {
+		name                    string
+		destinationRule         *networking.DestinationRule
+		subset                  string
+		expectedTunnelingConfig *tunnelingConfig
+	}{
+		{
+			name:                    "tunneling_config should not be applied if there is no a destination rule",
+			destinationRule:         nil,
+			expectedTunnelingConfig: nil,
+		},
+		{
+			name:                    "tunneling_config should not be applied when destination rule and listener subsets do not match",
+			destinationRule:         tunnelingEnabledForSubset,
+			subset:                  "another-subset",
+			expectedTunnelingConfig: nil,
+		},
+		{
+			name:            "tunneling_config should be applied when hosts array contains exactly 1 host and destination rule has defined tunneling settings",
+			destinationRule: tunnelingEnabled,
+			expectedTunnelingConfig: &tunnelingConfig{
+				hostname: "example.com:8443",
+				usePost:  false,
+			},
+		},
+		{
+			name: "tunneling_config should be applied when hosts array contains exactly 1 host and " +
+				"destination rule has defined tunneling settings for a subset",
+			destinationRule: tunnelingEnabledForSubset,
+			subset:          "example-com-8443",
+			expectedTunnelingConfig: &tunnelingConfig{
+				hostname: "example.com:8443",
+				usePost:  true,
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			env := buildListenerEnv([]*model.Service{
+				buildServiceWithPort("example.com", 443, protocol.TLS, tnow),
+			})
+			if err := env.PushContext.InitContext(env, nil, nil); err != nil {
+				t.Fatalf("Failed to initialize push context in test case %s: %v", tt.name, err)
+			}
+			proxy := getProxy()
+			proxy.SidecarScope = model.DefaultSidecarScopeForNamespace(env.PushContext, "default")
+
+			listeners := buildOutboundNetworkFiltersWithSingleDestination(env.PushContext, proxy, "", "",
+				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.Builder)
+
+			tcpProxy := tcp.TcpProxy{}
+			if err := listeners[0].GetTypedConfig().UnmarshalTo(&tcpProxy); err != nil {
+				t.Fatalf("Failed to unmarshal TcpProxy in test case %s: %v", tt.name, err)
+			}
+			if tt.expectedTunnelingConfig == nil {
+				if tcpProxy.TunnelingConfig != nil {
+					t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", listeners[0].String())
+				}
+			} else {
+				if tcpProxy.TunnelingConfig.GetHostname() != tt.expectedTunnelingConfig.hostname {
+					t.Fatalf("Expected to get tunneling_config.hostname: %s, but got: %s",
+						tcpProxy.TunnelingConfig.GetHostname(), tt.expectedTunnelingConfig.hostname)
+				}
+				if tcpProxy.TunnelingConfig.GetUsePost() != tt.expectedTunnelingConfig.usePost {
+					t.Fatalf("Expected to get tunneling_config.use_post: %t, but got: %t",
+						tcpProxy.TunnelingConfig.GetUsePost(), tt.expectedTunnelingConfig.usePost)
+				}
+			}
+		})
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			env := buildListenerEnv([]*model.Service{
+				buildServiceWithPort("example.com", 443, protocol.TLS, tnow),
+			})
+			if err := env.PushContext.InitContext(env, nil, nil); err != nil {
+				t.Fatalf("Failed to initialize push context in test case %s: %v", tt.name, err)
+			}
+			proxy := getProxy()
+			proxy.SidecarScope = model.DefaultSidecarScopeForNamespace(env.PushContext, "default")
+
+			listeners := buildOutboundNetworkFiltersWithSingleDestination(env.PushContext, proxy, "", "",
+				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.NilBuilder)
+
+			tcpProxy := tcp.TcpProxy{}
+			if err := listeners[0].GetTypedConfig().UnmarshalTo(&tcpProxy); err != nil {
+				t.Fatalf("Failed to unmarshal TcpProxy in test case %s: %v", tt.name, err)
+			}
+			// tunnelig_config should always be nil when tunnelingconfig.NilBuilder() is used
+			if tcpProxy.TunnelingConfig != nil {
+				t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", listeners[0].String())
 			}
 		})
 	}

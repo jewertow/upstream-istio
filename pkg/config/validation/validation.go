@@ -1307,7 +1307,7 @@ func validateTrafficPolicy(policy *networking.TrafficPolicy) Validation {
 		return Validation{}
 	}
 	if policy.OutlierDetection == nil && policy.ConnectionPool == nil &&
-		policy.LoadBalancer == nil && policy.Tls == nil && policy.PortLevelSettings == nil {
+		policy.LoadBalancer == nil && policy.Tls == nil && policy.PortLevelSettings == nil && policy.Tunnel == nil {
 		return WrapError(fmt.Errorf("traffic policy must have at least one field"))
 	}
 
@@ -1315,7 +1315,30 @@ func validateTrafficPolicy(policy *networking.TrafficPolicy) Validation {
 		validateConnectionPool(policy.ConnectionPool),
 		validateLoadBalancer(policy.LoadBalancer),
 		validateTLS(policy.Tls),
-		validatePortTrafficPolicies(policy.PortLevelSettings))
+		validatePortTrafficPolicies(policy.PortLevelSettings),
+		validateTunnelSettings(policy.Tunnel))
+}
+
+func validateTunnelSettings(tunnel *networking.TrafficPolicy_TunnelSettings) (errs error) {
+	if tunnel == nil {
+		return
+	}
+	if tunnel.Protocol == "" {
+		errs = appendErrors(errs, fmt.Errorf("tunnel protocol must be specified"))
+	}
+	if tunnel.Protocol != "connect" && tunnel.Protocol != "post" {
+		errs = appendErrors(errs, fmt.Errorf("tunnel protocol must be \"connect\" or \"post\""))
+	}
+	if tunnel.TargetHost == "" {
+		errs = appendErrors(errs, fmt.Errorf("tunnel target host must be specified"))
+	}
+	if strings.Contains(tunnel.TargetHost, "*") {
+		errs = appendErrors(errs, fmt.Errorf("tunnel target host must be FQDN or IP address"))
+	}
+	if tunnel.TargetPort == 0 {
+		errs = appendErrors(errs, fmt.Errorf("tunnel target port cannot be 0"))
+	}
+	return
 }
 
 func validateOutlierDetection(outlier *networking.OutlierDetection) (errs Validation) {

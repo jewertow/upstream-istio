@@ -1,0 +1,35 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: tunnel-via-external-forward-proxy
+spec:
+  host: external-forward-proxy.testdomain
+  subsets:
+  - name: external-app-8080
+    trafficPolicy:
+      tunnel:
+        protocol: connect
+        targetHost: external-app.testdomain
+        targetPort: 8080
+    {{ if .tlsEnabled }}
+      portLevelSettings:
+      - port:
+          number: 3128
+        tls:
+          mode: SIMPLE
+          sni: external-forward-proxy.testdomain
+    {{ end }}
+  - name: external-app-443
+    trafficPolicy:
+      tunnel:
+        protocol: connect
+        targetHost: external-app.testdomain
+        targetPort: 443
+    {{ if .tlsEnabled }}
+      portLevelSettings:
+      - port:
+          number: 3128
+        tls:
+          mode: SIMPLE
+          sni: external-forward-proxy.testdomain
+    {{ end }}

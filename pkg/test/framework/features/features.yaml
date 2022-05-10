@@ -55,6 +55,13 @@ features:
     cni:
       race-condition-repair:
       upgrade:
+    tunneling:
+      http1_proxy:
+        plain_text:
+        tls:
+      http2_proxy:
+        plain_text:
+        tls:
     gateway:
   usability:
     observability:

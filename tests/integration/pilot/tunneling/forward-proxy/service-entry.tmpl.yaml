@@ -1,0 +1,13 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: external-forward-proxy
+spec:
+  hosts:
+  - external-forward-proxy.testdomain
+  location: MESH_EXTERNAL
+  ports:
+  - number: 3128
+    name: http
+    protocol: {{ .protocol }}
+  resolution: DNS

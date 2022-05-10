@@ -1,0 +1,52 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: external-app-tunneling-tcp
+spec:
+  hosts:
+  - external-app.testdomain
+  gateways:
+  - istio-egressgateway
+  - mesh
+  tls:
+  - match:
+    - gateways:
+      - mesh
+      port: 443
+      sniHosts:
+      - external-app.testdomain
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        port:
+          number: 443
+  tcp:
+  - match:
+    - gateways:
+      - mesh
+      port: 8080
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        port:
+          number: 80
+  - match:
+    - gateways:
+      - istio-egressgateway
+      port: 80
+    route:
+    - destination:
+        host: external-forward-proxy.testdomain
+        subset: external-app-8080
+        port:
+          number: 3128
+  - match:
+    - gateways:
+      - istio-egressgateway
+      port: 443
+    route:
+    - destination:
+        host: external-forward-proxy.testdomain
+        subset: external-app-443
+        port:
+          number: 3128
