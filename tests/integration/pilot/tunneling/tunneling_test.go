@@ -281,7 +281,7 @@ func makeExternalServicesResolvable(ctx framework.TestContext, externalNs, meshN
 }
 
 func updateHostAliasesInDeploymentOrFail(ctx framework.TestContext, ns, name, externalAppIP, externalForwardProxyIP string) {
-	kubeClient := ctx.Clusters().Default()
+	kubeClient := ctx.Clusters().Default().Kube()
 
 	scaleDeploymentOrFail(ctx, ns, name, 0)
 	waitForPodsDeletedOrFail(ctx, ns, name)
@@ -321,7 +321,7 @@ func updateHostAliasesInDeploymentOrFail(ctx framework.TestContext, ns, name, ex
 // scaling a deployment may fail due to incorrect deployment version caused by preceding deployment update,
 // so it's necessary to retry the operation to make it reliable
 func scaleDeploymentOrFail(ctx framework.TestContext, ns, name string, scale int32) {
-	kubeClient := ctx.Clusters().Default()
+	kubeClient := ctx.Clusters().Default().Kube()
 	retry.UntilSuccessOrFail(ctx, func() error {
 		s, err := kubeClient.AppsV1().Deployments(ns).GetScale(context.TODO(), name, v1.GetOptions{})
 		if err != nil {

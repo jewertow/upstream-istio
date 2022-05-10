@@ -187,11 +187,6 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 		expectedTunnelingConfig *tunnelingConfig
 	}{
 		{
-			name:                    "tunneling_config should not be applied if there is no a destination rule",
-			destinationRule:         nil,
-			expectedTunnelingConfig: nil,
-		},
-		{
 			name:                    "tunneling_config should not be applied when destination rule and listener subsets do not match",
 			destinationRule:         tunnelingEnabledForSubset,
 			subset:                  "another-subset",
@@ -219,16 +214,21 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			env := buildListenerEnv([]*model.Service{
-				buildServiceWithPort("example.com", 443, protocol.TLS, tnow),
-			})
-			if err := env.PushContext.InitContext(env, nil, nil); err != nil {
-				t.Fatalf("Failed to initialize push context in test case %s: %v", tt.name, err)
+			destinationRuleConfig := config.Config{
+				Meta: config.Meta{
+					GroupVersionKind: collections.IstioNetworkingV1Alpha3Destinationrules.Resource().GroupVersionKind(),
+					Name:             "tunnel-config",
+					Namespace:        "not-default",
+				},
+				Spec: tt.destinationRule,
 			}
-			proxy := getProxy()
-			proxy.SidecarScope = model.DefaultSidecarScopeForNamespace(env.PushContext, "default")
+			cg := NewConfigGenTest(t, TestOptions{
+				ConfigPointers: []*config.Config{&destinationRuleConfig},
+				Services:       []*model.Service{buildServiceWithPort("example.com", 443, protocol.TLS, tnow)},
+			})
+			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: "not-default"})
 
-			listeners := buildOutboundNetworkFiltersWithSingleDestination(env.PushContext, proxy, "", "",
+			listeners := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
 				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.Builder)
 
 			tcpProxy := tcp.TcpProxy{}
@@ -254,16 +254,21 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			env := buildListenerEnv([]*model.Service{
-				buildServiceWithPort("example.com", 443, protocol.TLS, tnow),
-			})
-			if err := env.PushContext.InitContext(env, nil, nil); err != nil {
-				t.Fatalf("Failed to initialize push context in test case %s: %v", tt.name, err)
+			destinationRuleConfig := config.Config{
+				Meta: config.Meta{
+					GroupVersionKind: collections.IstioNetworkingV1Alpha3Destinationrules.Resource().GroupVersionKind(),
+					Name:             "tunnel-config",
+					Namespace:        "not-default",
+				},
+				Spec: tt.destinationRule,
 			}
-			proxy := getProxy()
-			proxy.SidecarScope = model.DefaultSidecarScopeForNamespace(env.PushContext, "default")
+			cg := NewConfigGenTest(t, TestOptions{
+				ConfigPointers: []*config.Config{&destinationRuleConfig},
+				Services:       []*model.Service{buildServiceWithPort("example.com", 443, protocol.TLS, tnow)},
+			})
+			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: "not-default"})
 
-			listeners := buildOutboundNetworkFiltersWithSingleDestination(env.PushContext, proxy, "", "",
+			listeners := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
 				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.NilBuilder)
 
 			tcpProxy := tcp.TcpProxy{}
