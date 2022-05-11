@@ -35,7 +35,6 @@ import (
 	"istio.io/istio/pkg/test/framework/components/namespace"
 	"istio.io/istio/pkg/test/framework/resource"
 	kubetest "istio.io/istio/pkg/test/kube"
-	"istio.io/istio/pkg/test/scopes"
 	"istio.io/istio/pkg/test/util/retry"
 	"istio.io/istio/tests/integration/pilot/common"
 )
@@ -195,18 +194,19 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		}
 
 		for _, protocol := range tc.protocols {
-			scopes.Framework.Infof("[%s] testing %s request...", tc.name, protocol)
-			// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
-			retry.UntilSuccessOrFail(ctx, func() error {
-				if err := executeRequestToExternalApp(ctx, meshNs.Name(), protocol, tc.name); err != nil {
-					return err
-				}
-				externalForwardProxyIP := getPodIP(ctx, externalNs.Name(), "external-forward-proxy")
-				if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, protocol, tc.name); err != nil {
-					return err
-				}
-				return nil
-			}, retry.Timeout(30*time.Second), retry.Delay(1*time.Second))
+			ctx.NewSubTest(fmt.Sprintf("%s/%s-request", tc.name, protocol)).Run(func(ctx framework.TestContext) {
+				// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
+				retry.UntilSuccessOrFail(ctx, func() error {
+					if err := executeRequestToExternalApp(ctx, meshNs.Name(), protocol, tc.name); err != nil {
+						return err
+					}
+					externalForwardProxyIP := getPodIP(ctx, externalNs.Name(), "external-forward-proxy")
+					if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, protocol, tc.name); err != nil {
+						return err
+					}
+					return nil
+				}, retry.Timeout(10*time.Second), retry.Delay(1*time.Second))
+			})
 		}
 
 		for _, res := range tc.istioResourcesToApply {
