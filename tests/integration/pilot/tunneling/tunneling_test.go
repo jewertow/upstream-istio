@@ -219,6 +219,8 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		for _, res := range tc.istioResourcesToApply {
 			common.DeleteFileOrFail(ctx, meshNs.Name(), res)
 		}
+		// make sure that configuration changes were pushed to sidecar proxies
+		time.Sleep(10 * time.Second)
 	}
 }
 
