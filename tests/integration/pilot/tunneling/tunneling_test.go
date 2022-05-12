@@ -59,13 +59,6 @@ func testCases() []tunnelingTestCase {
 				"gateway/tcp/gateway.yaml",
 			},
 		},
-		// Temporarily disabled, because of PR #38499 (commit 3643f2c172b91927ac4204f8dd16ba4b00a59832).
-		// "http",
-		// "https",
-		// sidecar logs:
-		//nolint:lll
-		// [2022-05-11T09:32:02.736Z] "- - -" 0 - - - "-" 517 309 2 - "-" "-" "-" "-" "10.244.0.34:8443" outbound|443|external-app-mtls-gateway|istio-egressgateway.istio-system.svc.cluster.local 10.244.0.33:48312 10.244.0.29:443 10.244.0.33:46102 external-app.testdomain -
-		// 2022-05-11T09:32:03.801667Z     warning envoy filter    Incorrect istio-peer-exchange ALPN magic. Peer missing TCP MetadataExchange filter.
 		//{
 		//	"gateway/tls/istio-mutual",
 		//	[]string{"http", "https"},
