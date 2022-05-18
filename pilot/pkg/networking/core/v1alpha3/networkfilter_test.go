@@ -29,6 +29,7 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/networking/core/v1alpha3/tunnelingconfig"
 	"istio.io/istio/pilot/pkg/networking/telemetry"
+	"istio.io/istio/pilot/test/xdstest"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/mesh"
 	"istio.io/istio/pkg/config/protocol"
@@ -228,16 +229,13 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 			})
 			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: "not-default"})
 
-			listeners := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
+			filters := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
 				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.Builder)
 
-			tcpProxy := tcp.TcpProxy{}
-			if err := listeners[0].GetTypedConfig().UnmarshalTo(&tcpProxy); err != nil {
-				t.Fatalf("Failed to unmarshal TcpProxy in test case %s: %v", tt.name, err)
-			}
+			tcpProxy := xdstest.ExtractTCPProxy(t, &listener.FilterChain{Filters: filters})
 			if tt.expectedTunnelingConfig == nil {
 				if tcpProxy.TunnelingConfig != nil {
-					t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", listeners[0].String())
+					t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", filters[0].String())
 				}
 			} else {
 				if tcpProxy.TunnelingConfig.GetHostname() != tt.expectedTunnelingConfig.hostname {
@@ -268,16 +266,12 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 			})
 			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: "not-default"})
 
-			listeners := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
+			filters := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
 				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.NilBuilder)
 
-			tcpProxy := tcp.TcpProxy{}
-			if err := listeners[0].GetTypedConfig().UnmarshalTo(&tcpProxy); err != nil {
-				t.Fatalf("Failed to unmarshal TcpProxy in test case %s: %v", tt.name, err)
-			}
-			// tunnelig_config should always be nil when tunnelingconfig.NilBuilder() is used
+			tcpProxy := xdstest.ExtractTCPProxy(t, &listener.FilterChain{Filters: filters})
 			if tcpProxy.TunnelingConfig != nil {
-				t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", listeners[0].String())
+				t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", filters[0].String())
 			}
 		})
 	}
