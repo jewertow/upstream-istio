@@ -49,41 +49,39 @@ type tunnelingTestCase struct {
 	istioResourcesToApply []string
 }
 
-func testCases() []tunnelingTestCase {
-	return []tunnelingTestCase{
-		{
-			"gateway/tcp",
-			[]string{"http", "https"},
-			[]string{
-				"gateway/tcp/virtual-service.yaml",
-				"gateway/tcp/gateway.yaml",
-			},
+var testCases = []tunnelingTestCase{
+	{
+		name:      "gateway/tcp",
+		protocols: []string{"http", "https"},
+		istioResourcesToApply: []string{
+			"gateway/tcp/virtual-service.yaml",
+			"gateway/tcp/gateway.yaml",
 		},
-		//{
-		//	"gateway/tls/istio-mutual",
-		//	[]string{"http", "https"},
-		//	[]string{
-		//		"gateway/tls-istio-mutual/mtls.yaml",
-		//		"gateway/tls-istio-mutual/virtual-service.yaml",
-		//		"gateway/tls-istio-mutual/gateway.yaml",
-		//	},
-		//},
-		{
-			"gateway/tls/passthrough",
-			[]string{"https"},
-			[]string{
-				"gateway/tls-passthrough/virtual-service.yaml",
-				"gateway/tls-passthrough/gateway.yaml",
-			},
+	},
+	//{
+	//	name:      "gateway/tls/istio-mutual",
+	//	protocols: []string{"http", "https"},
+	//	istioResourcesToApply: []string{
+	//		"gateway/tls-istio-mutual/mtls.yaml",
+	//		"gateway/tls-istio-mutual/virtual-service.yaml",
+	//		"gateway/tls-istio-mutual/gateway.yaml",
+	//	},
+	//},
+	{
+		name:      "gateway/tls/passthrough",
+		protocols: []string{"https"},
+		istioResourcesToApply: []string{
+			"gateway/tls-passthrough/virtual-service.yaml",
+			"gateway/tls-passthrough/gateway.yaml",
 		},
-		{
-			"sidecar",
-			[]string{"http", "https"},
-			[]string{
-				"sidecar/virtual-service.yaml",
-			},
+	},
+	{
+		name:      "sidecar",
+		protocols: []string{"http", "https"},
+		istioResourcesToApply: []string{
+			"sidecar/virtual-service.yaml",
 		},
-	}
+	},
 }
 
 var i istio.Instance
@@ -188,7 +186,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 	wg.Wait()
 	makeExternalServicesResolvable(ctx, externalNs.Name(), meshNs.Name())
 
-	for _, tc := range testCases() {
+	for _, tc := range testCases {
 		for _, res := range tc.istioResourcesToApply {
 			common.ApplyFileOrFail(ctx, meshNs.Name(), res)
 		}
