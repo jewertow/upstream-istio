@@ -36,7 +36,6 @@ import (
 	"istio.io/istio/pkg/test/framework/resource"
 	kubetest "istio.io/istio/pkg/test/kube"
 	"istio.io/istio/pkg/test/util/retry"
-	"istio.io/istio/tests/integration/pilot/common"
 )
 
 type tunnelingTestCase struct {
@@ -151,7 +150,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		common.ApplyFileOrFail(ctx, meshNs.Name(), path.Join(env.IstioSrc, "samples/sleep/sleep.yaml"))
+		ctx.ConfigIstio().File(meshNs.Name(), path.Join(env.IstioSrc, "samples/sleep/sleep.yaml")).ApplyOrFail(ctx)
 		waitForPodsReadyOrFail(ctx, meshNs.Name(), "sleep")
 	}()
 
@@ -165,21 +164,21 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		}
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/service-entry.tmpl.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "forward-proxy/ssl-certificate-configmap.yaml")
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "forward-proxy/ssl-private-key-configmap.yaml")
+		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
+		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().EvalFile(externalNs.Name(), templateParams, "forward-proxy/configmap.tmpl.yaml").ApplyOrFail(ctx)
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "forward-proxy/deployment.yaml")
+		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/deployment.yaml").ApplyOrFail(ctx)
 		waitForPodsReadyOrFail(ctx, externalNs.Name(), "external-forward-proxy")
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		common.ApplyFileOrFail(ctx, meshNs.Name(), "external-app/service-entry.yaml")
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "external-app/ssl-certificate-configmap.yaml")
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "external-app/ssl-private-key-configmap.yaml")
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "external-app/configmap.yaml")
-		common.ApplyFileOrFail(ctx, externalNs.Name(), "external-app/deployment.yaml")
+		ctx.ConfigIstio().File(meshNs.Name(), "external-app/service-entry.yaml").ApplyOrFail(ctx)
+		ctx.ConfigIstio().File(externalNs.Name(), "external-app/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
+		ctx.ConfigIstio().File(externalNs.Name(), "external-app/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
+		ctx.ConfigIstio().File(externalNs.Name(), "external-app/configmap.yaml").ApplyOrFail(ctx)
+		ctx.ConfigIstio().File(externalNs.Name(), "external-app/deployment.yaml").ApplyOrFail(ctx)
 		waitForPodsReadyOrFail(ctx, externalNs.Name(), "external-app")
 	}()
 
@@ -188,7 +187,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 
 	for _, tc := range testCases {
 		for _, res := range tc.istioResourcesToApply {
-			common.ApplyFileOrFail(ctx, meshNs.Name(), res)
+			ctx.ConfigIstio().File(meshNs.Name(), res).ApplyOrFail(ctx)
 		}
 
 		for _, protocol := range tc.protocols {
@@ -208,7 +207,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		}
 
 		for _, res := range tc.istioResourcesToApply {
-			common.DeleteFileOrFail(ctx, meshNs.Name(), res)
+			ctx.ConfigIstio().File(meshNs.Name(), res).DeleteOrFail(ctx)
 		}
 		// make sure that configuration changes were pushed to sidecar proxies
 		time.Sleep(10 * time.Second)
