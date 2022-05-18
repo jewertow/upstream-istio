@@ -163,7 +163,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		templateParams := map[string]interface{}{
 			"codecType":  proxyHTTPVersion,
 			"tlsEnabled": proxyTLSEnabled,
-			"protocol":   serviceEntryProtocol(proxyHTTPVersion, proxyTLSEnabled),
+			"protocol":   serviceEntryProtocol(proxyHTTPVersion),
 		}
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/service-entry.tmpl.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
@@ -349,11 +349,8 @@ func selectPort(protocol string) int32 {
 	return 443
 }
 
-func serviceEntryProtocol(httpVersion string, tlsEnabled bool) string {
+func serviceEntryProtocol(httpVersion string) string {
 	if httpVersion == http1 {
-		if tlsEnabled {
-			return "HTTPS"
-		}
 		return "HTTP"
 	}
 	return "HTTP2"
