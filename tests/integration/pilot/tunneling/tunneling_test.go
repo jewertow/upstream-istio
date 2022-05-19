@@ -20,6 +20,7 @@ package tunneling
 import (
 	"context"
 	"fmt"
+	"istio.io/istio/pkg/test/framework/components/istioctl"
 	"path"
 	"strings"
 	"sync"
@@ -209,8 +210,11 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		for _, res := range tc.istioResourcesToApply {
 			ctx.ConfigIstio().File(meshNs.Name(), res).DeleteOrFail(ctx)
 		}
-		// make sure that configuration changes were pushed to sidecar proxies
-		time.Sleep(10 * time.Second)
+
+		// Make sure that configuration changes were pushed to istio-proxies.
+		// Otherwise, test results could be false-positive,
+		// because subsequent test cases could work thanks to previous configurations.
+		waitUntilTunnelingConfigurationIsRemovedOrFail(ctx, meshNs.Name())
 	}
 }
 
@@ -407,4 +411,34 @@ func waitForPodsDeletedOrFail(ctx framework.TestContext, ns, appSelector string)
 		}
 		return nil
 	}, retry.Timeout(30*time.Second))
+}
+
+func waitUntilTunnelingConfigurationIsRemovedOrFail(ctx framework.TestContext, meshNs string) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		waitForTunnelingRemovedOrFail(ctx, meshNs, "sleep")
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		waitForTunnelingRemovedOrFail(ctx, "istio-system", "istio-egressgateway")
+	}()
+	wg.Wait()
+}
+
+func waitForTunnelingRemovedOrFail(ctx framework.TestContext, ns, app string) {
+	istioCtl := istioctl.NewOrFail(ctx, ctx, istioctl.Config{Cluster: ctx.Clusters().Default()})
+	args := []string{"proxy-config", "listeners", fmt.Sprintf("deploy/%s.%s", app, ns), "-o", "json"}
+	retry.UntilSuccessOrFail(ctx, func() error {
+		out, _, err := istioCtl.Invoke(args)
+		if err != nil {
+			return fmt.Errorf("failed to get listeners of %s/%s: %s", app, ns, err)
+		}
+		if strings.Contains(out, "tunnelingConfig") {
+			return fmt.Errorf("tunnelingConfig was not removed from istio-proxy configuration in %s/%s", app, ns)
+		}
+		return nil
+	}, retry.Timeout(10*time.Second), retry.Delay(1*time.Second))
 }
