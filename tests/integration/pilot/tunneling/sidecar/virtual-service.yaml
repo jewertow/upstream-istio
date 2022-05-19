@@ -9,9 +9,7 @@ spec:
   - mesh
   tcp:
   - match:
-    - gateways:
-      - mesh
-      port: 8080
+    - port: 8080
     route:
     - destination:
         host: external-forward-proxy.testdomain
@@ -20,9 +18,7 @@ spec:
           number: 3128
   tls:
   - match:
-    - gateways:
-      - mesh
-      sniHosts:
+    - sniHosts:
       - external-app.testdomain
       port: 443
     route:
