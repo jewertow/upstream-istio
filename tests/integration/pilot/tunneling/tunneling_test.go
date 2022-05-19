@@ -20,7 +20,6 @@ package tunneling
 import (
 	"context"
 	"fmt"
-	"istio.io/istio/pkg/test/framework/components/istioctl"
 	"path"
 	"strings"
 	"sync"
@@ -33,6 +32,7 @@ import (
 	"istio.io/istio/pkg/test/env"
 	"istio.io/istio/pkg/test/framework"
 	"istio.io/istio/pkg/test/framework/components/istio"
+	"istio.io/istio/pkg/test/framework/components/istioctl"
 	"istio.io/istio/pkg/test/framework/components/namespace"
 	"istio.io/istio/pkg/test/framework/resource"
 	kubetest "istio.io/istio/pkg/test/kube"
