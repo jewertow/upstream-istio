@@ -175,6 +175,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 
 	wg.Wait()
 	makeExternalServicesResolvable(ctx, externalNs.Name(), meshNs.Name())
+	externalForwardProxyIP := getPodIP(ctx, externalNs.Name(), "external-forward-proxy")
 
 	for _, proxySettings := range forwardProxyConfigurations {
 		templateParams := map[string]interface{}{
@@ -187,11 +188,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 
 		for _, tc := range testCases {
 			for _, res := range tc.istioResourcesToApply {
-				if strings.Contains(res, "virtual-service") {
-					ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).ApplyOrFail(ctx)
-				} else {
-					ctx.ConfigIstio().File(meshNs.Name(), res).ApplyOrFail(ctx)
-				}
+				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).ApplyOrFail(ctx)
 			}
 
 			for _, protocol := range tc.protocolsToTest {
@@ -202,7 +199,6 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 						if err := executeRequestToExternalApp(ctx, meshNs.Name(), protocol, tc.name); err != nil {
 							return err
 						}
-						externalForwardProxyIP := getPodIP(ctx, externalNs.Name(), "external-forward-proxy")
 						if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, protocol, tc.name); err != nil {
 							return err
 						}
@@ -212,11 +208,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 			}
 
 			for _, res := range tc.istioResourcesToApply {
-				if strings.Contains(res, "virtual-service") {
-					ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).DeleteOrFail(ctx)
-				} else {
-					ctx.ConfigIstio().File(meshNs.Name(), res).DeleteOrFail(ctx)
-				}
+				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).DeleteOrFail(ctx)
 			}
 
 			// Make sure that configuration changes were pushed to istio-proxies.
@@ -429,7 +421,7 @@ func waitForPodsReadyOrFail(ctx framework.TestContext, ns, appSelector string) {
 			return fmt.Errorf("pods app=%s are not ready: %v", appSelector, err)
 		}
 		return nil
-	}, retry.Timeout(1*time.Minute))
+	}, retry.Timeout(1*time.Minute), retry.Delay(500*time.Millisecond))
 }
 
 func waitForPodsDeletedOrFail(ctx framework.TestContext, ns, appSelector string) {
@@ -443,7 +435,7 @@ func waitForPodsDeletedOrFail(ctx framework.TestContext, ns, appSelector string)
 			return fmt.Errorf("expected to get 0 pods for app=%s, got: %d", appSelector, len(pods.Items))
 		}
 		return nil
-	}, retry.Timeout(30*time.Second))
+	}, retry.Timeout(30*time.Second), retry.Delay(500*time.Millisecond))
 }
 
 func waitUntilTunnelingConfigurationIsRemovedOrFail(ctx framework.TestContext, meshNs string) {
