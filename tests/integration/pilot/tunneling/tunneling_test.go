@@ -44,43 +44,66 @@ type tunnelingTestCase struct {
 	// name must be unique, because it's used in the requested URL and then it's searched for in the access.log file,
 	// so a duplicated name would make test false positive
 	name string
-	// protocols specifies what types of requests to test; it can contain "http" or "https" values
-	protocols []string
+	// protocolsToTest specifies what types of requests to test; it can contain "http" or "https" values
+	protocolsToTest []string
 	// istioResourcesToApply is a list of files with Istio resources required to apply to test a particular case
 	istioResourcesToApply []string
 }
 
+var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
+	{
+		Port:        3128,
+		HttpVersion: http1,
+		TlsEnabled:  false,
+	},
+	{
+		Port:        4128,
+		HttpVersion: http1,
+		TlsEnabled:  true,
+	},
+	{
+		Port:        5128,
+		HttpVersion: http2,
+		TlsEnabled:  false,
+	},
+	{
+		Port:        6128,
+		HttpVersion: http2,
+		TlsEnabled:  true,
+	},
+}
+
 var testCases = []tunnelingTestCase{
 	{
-		name:      "gateway/tcp",
-		protocols: []string{"http", "https"},
+		name:            "gateway/tcp",
+		protocolsToTest: []string{"http", "https"},
 		istioResourcesToApply: []string{
-			"gateway/tcp/virtual-service.yaml",
+			"gateway/tcp/virtual-service.tmpl.yaml",
 			"gateway/tcp/gateway.yaml",
 		},
 	},
 	//{
-	//	name:      "gateway/tls/istio-mutual",
-	//	protocols: []string{"http", "https"},
+	//	name:            "gateway/tls/istio-mutual",
+	//	protocolsToTest: []string{"http", "https"},
 	//	istioResourcesToApply: []string{
 	//		"gateway/tls-istio-mutual/mtls.yaml",
-	//		"gateway/tls-istio-mutual/virtual-service.yaml",
+	//		"gateway/tls-istio-mutual/virtual-service.tmpl.yaml",
 	//		"gateway/tls-istio-mutual/gateway.yaml",
 	//	},
 	//},
 	{
-		name:      "gateway/tls/passthrough",
-		protocols: []string{"https"},
+		name:            "gateway/tls/passthrough",
+		protocolsToTest: []string{"https"},
 		istioResourcesToApply: []string{
-			"gateway/tls-passthrough/virtual-service.yaml",
+			"gateway/tls-passthrough/virtual-service.tmpl.yaml",
 			"gateway/tls-passthrough/gateway.yaml",
 		},
 	},
 	{
-		name:      "sidecar",
-		protocols: []string{"http", "https"},
+		name:            "sidecar",
+		protocolsToTest: []string{"http", "https"},
 		istioResourcesToApply: []string{
-			"sidecar/virtual-service.yaml",
+			"sidecar/virtual-service.tmpl.yaml",
 		},
 	},
 }
@@ -107,43 +130,16 @@ meshConfig:
     mode: REGISTRY_ONLY`
 }
 
-func TestTunnelingViaHTTP1Proxy(t *testing.T) {
+func TestTunnelingOutboundTraffic(t *testing.T) {
 	framework.
 		NewTest(t).
 		Features("traffic.tunneling.http1_proxy.plain_text").
 		Run(func(ctx framework.TestContext) {
-			runTunnelingTests(t, ctx, http1, false)
+			runTunnelingTests(t, ctx)
 		})
 }
 
-func TestTunnelingViaHTTP1ProxyWithTLS(t *testing.T) {
-	framework.
-		NewTest(t).
-		Features("traffic.tunneling.http1_proxy.tls").
-		Run(func(ctx framework.TestContext) {
-			runTunnelingTests(t, ctx, http1, true)
-		})
-}
-
-func TestTunnelingViaHTTP2Proxy(t *testing.T) {
-	framework.
-		NewTest(t).
-		Features("traffic.tunneling.http2_proxy.plain_text").
-		Run(func(ctx framework.TestContext) {
-			runTunnelingTests(t, ctx, http2, false)
-		})
-}
-
-func TestTunnelingViaHTTP2ProxyWithTLS(t *testing.T) {
-	framework.
-		NewTest(t).
-		Features("traffic.tunneling.http2_proxy.tls").
-		Run(func(ctx framework.TestContext) {
-			runTunnelingTests(t, ctx, http2, true)
-		})
-}
-
-func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion string, proxyTLSEnabled bool) {
+func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 	meshNs := namespace.NewOrFail(t, ctx, namespace.Config{Prefix: "mesh", Inject: true})
 	externalNs := namespace.NewOrFail(t, ctx, namespace.Config{Prefix: "external", Inject: false})
 
@@ -159,16 +155,9 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		templateParams := map[string]interface{}{
-			"codecType":  proxyHTTPVersion,
-			"tlsEnabled": proxyTLSEnabled,
-			"protocol":   serviceEntryProtocol(proxyHTTPVersion),
-		}
-		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/service-entry.tmpl.yaml").ApplyOrFail(ctx)
-		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
-		applyForwardProxyConfigMap(ctx, externalNs.Name(), proxyHTTPVersion, proxyTLSEnabled)
+		applyForwardProxyConfigMap(ctx, externalNs.Name())
 		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/deployment.yaml").ApplyOrFail(ctx)
 		waitForPodsReadyOrFail(ctx, externalNs.Name(), "external-forward-proxy")
 	}()
@@ -187,35 +176,57 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 	wg.Wait()
 	makeExternalServicesResolvable(ctx, externalNs.Name(), meshNs.Name())
 
-	for _, tc := range testCases {
-		for _, res := range tc.istioResourcesToApply {
-			ctx.ConfigIstio().File(meshNs.Name(), res).ApplyOrFail(ctx)
+	for _, proxySettings := range forwardProxyConfigurations {
+		templateParams := map[string]interface{}{
+			"port":       proxySettings.Port,
+			"protocol":   serviceEntryProtocol(proxySettings.HttpVersion),
+			"tlsEnabled": proxySettings.TlsEnabled,
+		}
+		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/service-entry.tmpl.yaml").ApplyOrFail(ctx)
+		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
+
+		for _, tc := range testCases {
+			for _, res := range tc.istioResourcesToApply {
+				if strings.Contains(res, "virtual-service") {
+					ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).ApplyOrFail(ctx)
+				} else {
+					ctx.ConfigIstio().File(meshNs.Name(), res).ApplyOrFail(ctx)
+				}
+			}
+
+			for _, protocol := range tc.protocolsToTest {
+				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HttpVersion, proxySettings.TlsEnabledStr(), tc.name, protocol)
+				ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
+					// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
+					retry.UntilSuccessOrFail(ctx, func() error {
+						if err := executeRequestToExternalApp(ctx, meshNs.Name(), protocol, tc.name); err != nil {
+							return err
+						}
+						externalForwardProxyIP := getPodIP(ctx, externalNs.Name(), "external-forward-proxy")
+						if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, protocol, tc.name); err != nil {
+							return err
+						}
+						return nil
+					}, retry.Timeout(10*time.Second))
+				})
+			}
+
+			for _, res := range tc.istioResourcesToApply {
+				if strings.Contains(res, "virtual-service") {
+					ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).DeleteOrFail(ctx)
+				} else {
+					ctx.ConfigIstio().File(meshNs.Name(), res).DeleteOrFail(ctx)
+				}
+			}
+
+			// Make sure that configuration changes were pushed to istio-proxies.
+			// Otherwise, test results could be false-positive,
+			// because subsequent test cases could work thanks to previous configurations.
+			waitUntilTunnelingConfigurationIsRemovedOrFail(ctx, meshNs.Name())
 		}
 
-		for _, protocol := range tc.protocols {
-			ctx.NewSubTest(fmt.Sprintf("%s/%s-request", tc.name, protocol)).Run(func(ctx framework.TestContext) {
-				// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
-				retry.UntilSuccessOrFail(ctx, func() error {
-					if err := executeRequestToExternalApp(ctx, meshNs.Name(), protocol, tc.name); err != nil {
-						return err
-					}
-					externalForwardProxyIP := getPodIP(ctx, externalNs.Name(), "external-forward-proxy")
-					if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, protocol, tc.name); err != nil {
-						return err
-					}
-					return nil
-				}, retry.Timeout(10*time.Second), retry.Delay(1*time.Second))
-			})
-		}
-
-		for _, res := range tc.istioResourcesToApply {
-			ctx.ConfigIstio().File(meshNs.Name(), res).DeleteOrFail(ctx)
-		}
-
-		// Make sure that configuration changes were pushed to istio-proxies.
-		// Otherwise, test results could be false-positive,
-		// because subsequent test cases could work thanks to previous configurations.
-		waitUntilTunnelingConfigurationIsRemovedOrFail(ctx, meshNs.Name())
+		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/service-entry.tmpl.yaml").DeleteOrFail(ctx)
+		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").DeleteOrFail(ctx)
 	}
 }
 
@@ -257,10 +268,10 @@ func verifyThatRequestWasTunneled(ctx framework.TestContext, externalNs, expecte
 	return nil
 }
 
-func applyForwardProxyConfigMap(ctx framework.TestContext, externalNs, httpVersion string, tlsEnabled bool) {
+func applyForwardProxyConfigMap(ctx framework.TestContext, externalNs string) {
 	kubeClient := ctx.Clusters().Default().Kube()
 
-	bootstrapYaml, err := forward_proxy.GenerateForwardProxyBootstrapConfig(httpVersion, tlsEnabled)
+	bootstrapYaml, err := forward_proxy.GenerateForwardProxyBootstrapConfig(forwardProxyConfigurations)
 	if err != nil {
 		ctx.Fatalf("failed to generate bootstrap configuration for external-forward-proxy: %s", err)
 	}
@@ -362,7 +373,7 @@ func scaleDeploymentOrFail(ctx framework.TestContext, ns, name string, scale int
 			ctx.Fatalf("failed to update scale of deployment %s: %v", name, err)
 		}
 		return nil
-	}, retry.Timeout(3*time.Second), retry.Delay(1*time.Second))
+	}, retry.Timeout(3*time.Second))
 }
 
 func selectPort(protocol string) int32 {
@@ -418,7 +429,7 @@ func waitForPodsReadyOrFail(ctx framework.TestContext, ns, appSelector string) {
 			return fmt.Errorf("pods app=%s are not ready: %v", appSelector, err)
 		}
 		return nil
-	}, retry.Timeout(1*time.Minute), retry.Delay(1*time.Second))
+	}, retry.Timeout(1*time.Minute))
 }
 
 func waitForPodsDeletedOrFail(ctx framework.TestContext, ns, appSelector string) {
@@ -462,5 +473,5 @@ func waitForTunnelingRemovedOrFail(ctx framework.TestContext, ns, app string) {
 			return fmt.Errorf("tunnelingConfig was not removed from istio-proxy configuration in %s/%s", app, ns)
 		}
 		return nil
-	}, retry.Timeout(10*time.Second), retry.Delay(1*time.Second))
+	}, retry.Timeout(10*time.Second))
 }

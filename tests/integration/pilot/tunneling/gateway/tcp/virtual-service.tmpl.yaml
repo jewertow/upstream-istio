@@ -15,7 +15,6 @@ spec:
     route:
     - destination:
         host: istio-egressgateway.istio-system.svc.cluster.local
-        subset: external-app-mtls-gateway
         port:
           number: 443
   tcp:
@@ -24,7 +23,6 @@ spec:
     route:
     - destination:
         host: istio-egressgateway.istio-system.svc.cluster.local
-        subset: external-app-mtls-gateway
         port:
           number: 80
 ---
@@ -45,7 +43,7 @@ spec:
         host: external-forward-proxy.testdomain
         subset: external-app-8080
         port:
-          number: 3128
+          number: {{ .port }}
   - match:
     - port: 443
     route:
@@ -53,4 +51,4 @@ spec:
         host: external-forward-proxy.testdomain
         subset: external-app-443
         port:
-          number: 3128
+          number: {{ .port }}

@@ -15,8 +15,18 @@ spec:
     route:
     - destination:
         host: istio-egressgateway.istio-system.svc.cluster.local
+        subset: external-app-mtls-gateway
         port:
           number: 443
+  tcp:
+  - match:
+    - port: 8080
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        subset: external-app-mtls-gateway
+        port:
+          number: 80
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -27,16 +37,20 @@ spec:
   - external-app.testdomain
   gateways:
   - istio-egressgateway
-  tls:
+  tcp:
   - match:
-    - gateways:
-      - istio-egressgateway
-      port: 443
-      sniHosts:
-      - external-app.testdomain
+    - port: 80
+    route:
+    - destination:
+        host: external-forward-proxy.testdomain
+        subset: external-app-8080
+        port:
+          number: {{ .port }}
+  - match:
+    - port: 443
     route:
     - destination:
         host: external-forward-proxy.testdomain
         subset: external-app-443
         port:
-          number: 3128
+          number: {{ .port }}

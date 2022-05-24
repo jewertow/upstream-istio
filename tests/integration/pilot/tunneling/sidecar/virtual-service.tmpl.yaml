@@ -15,7 +15,7 @@ spec:
         host: external-forward-proxy.testdomain
         subset: external-app-8080
         port:
-          number: 3128
+          number: {{ .port }}
   tls:
   - match:
     - sniHosts:
@@ -26,4 +26,4 @@ spec:
         host: external-forward-proxy.testdomain
         subset: external-app-443
         port:
-          number: 3128
+          number: {{ .port }}

@@ -14,7 +14,7 @@ spec:
     {{ if .tlsEnabled }}
       portLevelSettings:
       - port:
-          number: 3128
+          number: {{ .port }}
         tls:
           mode: SIMPLE
           sni: external-forward-proxy.testdomain
@@ -28,7 +28,7 @@ spec:
     {{ if .tlsEnabled }}
       portLevelSettings:
       - port:
-          number: 3128
+          number: {{ .port }}
         tls:
           mode: SIMPLE
           sni: external-forward-proxy.testdomain

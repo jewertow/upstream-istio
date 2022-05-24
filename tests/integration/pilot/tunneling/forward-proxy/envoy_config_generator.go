@@ -18,48 +18,44 @@
 package forward_proxy
 
 import (
-	envoyv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
+	"fmt"
+
+	envoy_bootstrap "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
 	envoy_cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	envoy_route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
-	envoy_cluster_dynamic_forward_proxy "github.com/envoyproxy/go-control-plane/envoy/extensions/clusters/dynamic_forward_proxy/v3"
+	envoy_clusters_dynamic_forward_proxy "github.com/envoyproxy/go-control-plane/envoy/extensions/clusters/dynamic_forward_proxy/v3"
 	envoy_common_dynamic_forward_proxy "github.com/envoyproxy/go-control-plane/envoy/extensions/common/dynamic_forward_proxy/v3"
-	dynamic_forward_proxyv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_forward_proxy/v3"
-	http_conn "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
-	caresv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/network/dns_resolver/cares/v3"
-	tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	envoy_filters_dynamic_forward_proxy "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_forward_proxy/v3"
+	envoy_hcm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	envoy_dns_cares "github.com/envoyproxy/go-control-plane/envoy/extensions/network/dns_resolver/cares/v3"
+	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+
 	"istio.io/istio/pilot/pkg/networking"
 	"istio.io/istio/pkg/util/protomarshal"
 )
 
-func GenerateForwardProxyBootstrapConfig(httpVersion string, tlsEnabled bool) (string, error) {
-	hcm := createHttpConnectionManager(httpVersion)
-	bootstrap := &envoyv3.Bootstrap{
-		Admin: &envoyv3.Admin{
+type ListenerSettings struct {
+	Port        uint32
+	HttpVersion string
+	TlsEnabled  bool
+}
+
+func (l ListenerSettings) TlsEnabledStr() string {
+	if l.TlsEnabled {
+		return "TLS"
+	}
+	return "noTLS"
+}
+
+func GenerateForwardProxyBootstrapConfig(listeners []ListenerSettings) (string, error) {
+	bootstrap := &envoy_bootstrap.Bootstrap{
+		Admin: &envoy_bootstrap.Admin{
 			Address: createSocketAddress("127.0.0.1", 9902),
 		},
-		StaticResources: &envoyv3.Bootstrap_StaticResources{
-			Listeners: []*envoy_listener.Listener{
-				{
-					Name:    "http_forward_proxy",
-					Address: createSocketAddress("0.0.0.0", 3128),
-					FilterChains: []*envoy_listener.FilterChain{
-						{
-							Filters: []*envoy_listener.Filter{
-								{
-									Name: "envoy.filters.network.http_connection_manager",
-									ConfigType: &envoy_listener.Filter_TypedConfig{
-										TypedConfig: networking.MessageToAny(hcm),
-									},
-								},
-							},
-							TransportSocket: createTransportSocket(tlsEnabled),
-						},
-					},
-					StatPrefix: "http_forward_proxy",
-				},
-			},
+		StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
+			Listeners: []*envoy_listener.Listener{},
 			Clusters: []*envoy_cluster.Cluster{
 				{
 					Name:     "dynamic_forward_proxy_cluster",
@@ -67,7 +63,7 @@ func GenerateForwardProxyBootstrapConfig(httpVersion string, tlsEnabled bool) (s
 					ClusterDiscoveryType: &envoy_cluster.Cluster_ClusterType{
 						ClusterType: &envoy_cluster.Cluster_CustomClusterType{
 							Name: "envoy.clusters.dynamic_forward_proxy",
-							TypedConfig: networking.MessageToAny(&envoy_cluster_dynamic_forward_proxy.ClusterConfig{
+							TypedConfig: networking.MessageToAny(&envoy_clusters_dynamic_forward_proxy.ClusterConfig{
 								DnsCacheConfig: dynamicForwardProxyCacheConfig,
 							}),
 						},
@@ -75,6 +71,27 @@ func GenerateForwardProxyBootstrapConfig(httpVersion string, tlsEnabled bool) (s
 				},
 			},
 		},
+	}
+	for _, listenerSettings := range listeners {
+		hcm := createHttpConnectionManager(listenerSettings.HttpVersion)
+		bootstrap.StaticResources.Listeners = append(bootstrap.StaticResources.Listeners, &envoy_listener.Listener{
+			Name:    fmt.Sprintf("http_forward_proxy_%d", listenerSettings.Port),
+			Address: createSocketAddress("0.0.0.0", listenerSettings.Port),
+			FilterChains: []*envoy_listener.FilterChain{
+				{
+					Filters: []*envoy_listener.Filter{
+						{
+							Name: "envoy.filters.network.http_connection_manager",
+							ConfigType: &envoy_listener.Filter_TypedConfig{
+								TypedConfig: networking.MessageToAny(hcm),
+							},
+						},
+					},
+					TransportSocket: createTransportSocket(listenerSettings.TlsEnabled),
+				},
+			},
+			StatPrefix: fmt.Sprintf("http_forward_proxy_%d", listenerSettings.Port),
+		})
 	}
 	return protomarshal.ToYAML(bootstrap)
 }
@@ -84,7 +101,7 @@ var dynamicForwardProxyCacheConfig = &envoy_common_dynamic_forward_proxy.DnsCach
 	DnsLookupFamily: envoy_cluster.Cluster_V4_ONLY,
 	TypedDnsResolverConfig: &envoy_core.TypedExtensionConfig{
 		Name: "envoy.network.dns_resolver.cares",
-		TypedConfig: networking.MessageToAny(&caresv3.CaresDnsResolverConfig{
+		TypedConfig: networking.MessageToAny(&envoy_dns_cares.CaresDnsResolverConfig{
 			Resolvers: []*envoy_core.Address{
 				createSocketAddress("8.8.8.8", 53),
 			},
@@ -92,13 +109,13 @@ var dynamicForwardProxyCacheConfig = &envoy_common_dynamic_forward_proxy.DnsCach
 	},
 }
 
-func createHttpConnectionManager(httpVersion string) *http_conn.HttpConnectionManager {
-	hcm := &http_conn.HttpConnectionManager{
-		HttpFilters: []*http_conn.HttpFilter{
+func createHttpConnectionManager(httpVersion string) *envoy_hcm.HttpConnectionManager {
+	hcm := &envoy_hcm.HttpConnectionManager{
+		HttpFilters: []*envoy_hcm.HttpFilter{
 			{
 				Name: "envoy.filters.http.dynamic_forward_proxy",
-				ConfigType: &http_conn.HttpFilter_TypedConfig{
-					TypedConfig: networking.MessageToAny(&dynamic_forward_proxyv3.FilterConfig{
+				ConfigType: &envoy_hcm.HttpFilter_TypedConfig{
+					TypedConfig: networking.MessageToAny(&envoy_filters_dynamic_forward_proxy.FilterConfig{
 						DnsCacheConfig: dynamicForwardProxyCacheConfig,
 					}),
 				},
@@ -107,7 +124,7 @@ func createHttpConnectionManager(httpVersion string) *http_conn.HttpConnectionMa
 				Name: "envoy.filters.http.router",
 			},
 		},
-		RouteSpecifier: &http_conn.HttpConnectionManager_RouteConfig{
+		RouteSpecifier: &envoy_hcm.HttpConnectionManager_RouteConfig{
 			RouteConfig: &envoy_route.RouteConfiguration{
 				Name: "default",
 				VirtualHosts: []*envoy_route.VirtualHost{
@@ -141,11 +158,11 @@ func createHttpConnectionManager(httpVersion string) *http_conn.HttpConnectionMa
 		StatPrefix: "http_forward_proxy",
 	}
 	if httpVersion == "HTTP1" {
-		hcm.CodecType = http_conn.HttpConnectionManager_HTTP1
+		hcm.CodecType = envoy_hcm.HttpConnectionManager_HTTP1
 		hcm.HttpProtocolOptions = &envoy_core.Http1ProtocolOptions{}
 	}
 	if httpVersion == "HTTP2" {
-		hcm.CodecType = http_conn.HttpConnectionManager_HTTP2
+		hcm.CodecType = envoy_hcm.HttpConnectionManager_HTTP2
 		hcm.Http2ProtocolOptions = &envoy_core.Http2ProtocolOptions{
 			AllowConnect: true,
 		}
@@ -160,9 +177,9 @@ func createTransportSocket(tlsEnabled bool) *envoy_core.TransportSocket {
 	return &envoy_core.TransportSocket{
 		Name: "envoy.transport_sockets.tls",
 		ConfigType: &envoy_core.TransportSocket_TypedConfig{
-			TypedConfig: networking.MessageToAny(&tls.DownstreamTlsContext{
-				CommonTlsContext: &tls.CommonTlsContext{
-					TlsCertificates: []*tls.TlsCertificate{
+			TypedConfig: networking.MessageToAny(&envoy_tls.DownstreamTlsContext{
+				CommonTlsContext: &envoy_tls.CommonTlsContext{
+					TlsCertificates: []*envoy_tls.TlsCertificate{
 						{
 							CertificateChain: &envoy_core.DataSource{
 								Specifier: &envoy_core.DataSource_Filename{

@@ -7,7 +7,7 @@ spec:
   - external-forward-proxy.testdomain
   location: MESH_EXTERNAL
   ports:
-  - number: 3128
+  - number: {{ .port }}
     name: http
     protocol: {{ .protocol }}
   resolution: DNS
