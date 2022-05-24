@@ -20,6 +20,7 @@ package tunneling
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -46,8 +47,6 @@ type tunnelingTestCase struct {
 	name string
 	// protocolsToTest specifies what types of requests to test; it can contain "http" or "https" values
 	protocolsToTest []string
-	// istioResourcesToApply is a list of files with Istio resources required to apply to test a particular case
-	istioResourcesToApply []string
 }
 
 var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
@@ -77,34 +76,18 @@ var testCases = []tunnelingTestCase{
 	{
 		name:            "gateway/tcp",
 		protocolsToTest: []string{"http", "https"},
-		istioResourcesToApply: []string{
-			"gateway/tcp/virtual-service.tmpl.yaml",
-			"gateway/tcp/gateway.yaml",
-		},
 	},
 	//{
 	//	name:            "gateway/tls/istio-mutual",
 	//	protocolsToTest: []string{"http", "https"},
-	//	istioResourcesToApply: []string{
-	//		"gateway/tls-istio-mutual/mtls.yaml",
-	//		"gateway/tls-istio-mutual/virtual-service.tmpl.yaml",
-	//		"gateway/tls-istio-mutual/gateway.yaml",
-	//	},
 	//},
 	{
 		name:            "gateway/tls/passthrough",
 		protocolsToTest: []string{"https"},
-		istioResourcesToApply: []string{
-			"gateway/tls-passthrough/virtual-service.tmpl.yaml",
-			"gateway/tls-passthrough/gateway.yaml",
-		},
 	},
 	{
 		name:            "sidecar",
 		protocolsToTest: []string{"http", "https"},
-		istioResourcesToApply: []string{
-			"sidecar/virtual-service.tmpl.yaml",
-		},
 	},
 }
 
@@ -187,7 +170,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
 
 		for _, tc := range testCases {
-			for _, res := range tc.istioResourcesToApply {
+			for _, res := range listFilesInDirectory(ctx, tc.name) {
 				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).ApplyOrFail(ctx)
 			}
 
@@ -207,7 +190,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 				})
 			}
 
-			for _, res := range tc.istioResourcesToApply {
+			for _, res := range listFilesInDirectory(ctx, tc.name) {
 				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).DeleteOrFail(ctx)
 			}
 
@@ -366,6 +349,18 @@ func scaleDeploymentOrFail(ctx framework.TestContext, ns, name string, scale int
 		}
 		return nil
 	}, retry.Timeout(3*time.Second))
+}
+
+func listFilesInDirectory(ctx framework.TestContext, dir string) []string {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		ctx.Fatalf("failed to read files in directory: %s", err)
+	}
+	filesList := make([]string, 0, len(files))
+	for _, file := range files {
+		filesList = append(filesList, fmt.Sprintf("%s/%s", dir, file.Name()))
+	}
+	return filesList
 }
 
 func selectPort(protocol string) int32 {
