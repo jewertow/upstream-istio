@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package forward_proxy
+package forwardproxy
 
 import (
 	"fmt"
@@ -38,12 +38,12 @@ import (
 
 type ListenerSettings struct {
 	Port        uint32
-	HttpVersion string
-	TlsEnabled  bool
+	HTTPVersion string
+	TLSEnabled  bool
 }
 
-func (l ListenerSettings) TlsEnabledStr() string {
-	if l.TlsEnabled {
+func (l ListenerSettings) TLSEnabledStr() string {
+	if l.TLSEnabled {
 		return "TLS"
 	}
 	return "noTLS"
@@ -73,7 +73,7 @@ func GenerateForwardProxyBootstrapConfig(listeners []ListenerSettings) (string, 
 		},
 	}
 	for _, listenerSettings := range listeners {
-		hcm := createHttpConnectionManager(listenerSettings.HttpVersion)
+		hcm := createHTTPConnectionManager(listenerSettings.HTTPVersion)
 		bootstrap.StaticResources.Listeners = append(bootstrap.StaticResources.Listeners, &envoy_listener.Listener{
 			Name:    fmt.Sprintf("http_forward_proxy_%d", listenerSettings.Port),
 			Address: createSocketAddress("0.0.0.0", listenerSettings.Port),
@@ -87,7 +87,7 @@ func GenerateForwardProxyBootstrapConfig(listeners []ListenerSettings) (string, 
 							},
 						},
 					},
-					TransportSocket: createTransportSocket(listenerSettings.TlsEnabled),
+					TransportSocket: createTransportSocket(listenerSettings.TLSEnabled),
 				},
 			},
 			StatPrefix: fmt.Sprintf("http_forward_proxy_%d", listenerSettings.Port),
@@ -109,7 +109,7 @@ var dynamicForwardProxyCacheConfig = &envoy_common_dynamic_forward_proxy.DnsCach
 	},
 }
 
-func createHttpConnectionManager(httpVersion string) *envoy_hcm.HttpConnectionManager {
+func createHTTPConnectionManager(httpVersion string) *envoy_hcm.HttpConnectionManager {
 	hcm := &envoy_hcm.HttpConnectionManager{
 		HttpFilters: []*envoy_hcm.HttpFilter{
 			{

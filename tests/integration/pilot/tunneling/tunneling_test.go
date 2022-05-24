@@ -53,23 +53,23 @@ type tunnelingTestCase struct {
 var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
 	{
 		Port:        3128,
-		HttpVersion: http1,
-		TlsEnabled:  false,
+		HTTPVersion: http1,
+		TLSEnabled:  false,
 	},
 	{
 		Port:        4128,
-		HttpVersion: http1,
-		TlsEnabled:  true,
+		HTTPVersion: http1,
+		TLSEnabled:  true,
 	},
 	{
 		Port:        5128,
-		HttpVersion: http2,
-		TlsEnabled:  false,
+		HTTPVersion: http2,
+		TLSEnabled:  false,
 	},
 	{
 		Port:        6128,
-		HttpVersion: http2,
-		TlsEnabled:  true,
+		HTTPVersion: http2,
+		TLSEnabled:  true,
 	},
 }
 
@@ -179,8 +179,8 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 	for _, proxySettings := range forwardProxyConfigurations {
 		templateParams := map[string]interface{}{
 			"port":       proxySettings.Port,
-			"protocol":   serviceEntryProtocol(proxySettings.HttpVersion),
-			"tlsEnabled": proxySettings.TlsEnabled,
+			"protocol":   serviceEntryProtocol(proxySettings.HTTPVersion),
+			"tlsEnabled": proxySettings.TLSEnabled,
 		}
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/service-entry.tmpl.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
@@ -195,7 +195,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 			}
 
 			for _, protocol := range tc.protocolsToTest {
-				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HttpVersion, proxySettings.TlsEnabledStr(), tc.name, protocol)
+				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.name, protocol)
 				ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
 					// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
 					retry.UntilSuccessOrFail(ctx, func() error {
