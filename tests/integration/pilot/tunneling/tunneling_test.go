@@ -27,7 +27,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"istio.io/istio/pkg/test/env"
 	"istio.io/istio/pkg/test/framework"
@@ -37,6 +37,7 @@ import (
 	"istio.io/istio/pkg/test/framework/resource"
 	kubetest "istio.io/istio/pkg/test/kube"
 	"istio.io/istio/pkg/test/util/retry"
+	forward_proxy "istio.io/istio/tests/integration/pilot/tunneling/forward-proxy"
 )
 
 type tunnelingTestCase struct {
@@ -167,7 +168,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext, proxyHTTPVersion
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
 		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
-		ctx.ConfigIstio().EvalFile(externalNs.Name(), templateParams, "forward-proxy/configmap.tmpl.yaml").ApplyOrFail(ctx)
+		applyForwardProxyConfigMap(ctx, externalNs.Name(), proxyHTTPVersion, proxyTLSEnabled)
 		ctx.ConfigIstio().File(externalNs.Name(), "forward-proxy/deployment.yaml").ApplyOrFail(ctx)
 		waitForPodsReadyOrFail(ctx, externalNs.Name(), "external-forward-proxy")
 	}()
@@ -256,6 +257,27 @@ func verifyThatRequestWasTunneled(ctx framework.TestContext, externalNs, expecte
 	return nil
 }
 
+func applyForwardProxyConfigMap(ctx framework.TestContext, externalNs, httpVersion string, tlsEnabled bool) {
+	kubeClient := ctx.Clusters().Default().Kube()
+
+	bootstrapYaml, err := forward_proxy.GenerateForwardProxyBootstrapConfig(httpVersion, tlsEnabled)
+	if err != nil {
+		ctx.Fatalf("failed to generate bootstrap configuration for external-forward-proxy: %s", err)
+	}
+
+	cfgMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "external-forward-proxy-config",
+		},
+		Data: map[string]string{
+			"envoy.yaml": bootstrapYaml,
+		},
+	}
+	if _, err := kubeClient.CoreV1().ConfigMaps(externalNs).Create(context.TODO(), cfgMap, metav1.CreateOptions{}); err != nil {
+		ctx.Fatalf("failed to create config map for external-forward-proxy: %s", err)
+	}
+}
+
 // makeExternalServicesResolvable sets host aliases for external-app and external-forward-proxy in sleep
 // and istio-egressgateway deployments. Without host aliases domains of external-app and external-forward-proxy
 // would not be resolvable, because there are no Kubernetes services for them. Instead, Istio service entries are used.
@@ -292,7 +314,7 @@ func updateHostAliasesInDeploymentOrFail(ctx framework.TestContext, ns, name, ex
 	// updating a deployment may fail due to incorrect deployment version caused by preceding deployment update,
 	// so it's necessary to retry the operation to make it reliable
 	retry.UntilSuccessOrFail(ctx, func() error {
-		deployment, err := kubeClient.AppsV1().Deployments(ns).Get(context.TODO(), name, v1.GetOptions{})
+		deployment, err := kubeClient.AppsV1().Deployments(ns).Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			ctx.Fatalf("failed to get deployment %s: %v", name, err)
 		}
@@ -307,7 +329,7 @@ func updateHostAliasesInDeploymentOrFail(ctx framework.TestContext, ns, name, ex
 			},
 		}
 
-		_, err = kubeClient.AppsV1().Deployments(ns).Update(context.TODO(), deployment, v1.UpdateOptions{})
+		_, err = kubeClient.AppsV1().Deployments(ns).Update(context.TODO(), deployment, metav1.UpdateOptions{})
 		if err != nil {
 			if strings.Contains(err.Error(), "the object has been modified") {
 				return fmt.Errorf("failed to update deployment %s: %v", name, err)
@@ -326,13 +348,13 @@ func updateHostAliasesInDeploymentOrFail(ctx framework.TestContext, ns, name, ex
 func scaleDeploymentOrFail(ctx framework.TestContext, ns, name string, scale int32) {
 	kubeClient := ctx.Clusters().Default().Kube()
 	retry.UntilSuccessOrFail(ctx, func() error {
-		s, err := kubeClient.AppsV1().Deployments(ns).GetScale(context.TODO(), name, v1.GetOptions{})
+		s, err := kubeClient.AppsV1().Deployments(ns).GetScale(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get scale of deployment %s: %v", name, err)
 		}
 
 		s.Spec.Replicas = scale
-		_, err = kubeClient.AppsV1().Deployments(ns).UpdateScale(context.TODO(), name, s, v1.UpdateOptions{})
+		_, err = kubeClient.AppsV1().Deployments(ns).UpdateScale(context.TODO(), name, s, metav1.UpdateOptions{})
 		if err != nil {
 			if strings.Contains(err.Error(), "the object has been modified") {
 				return fmt.Errorf("failed to update scale of deployment %s: %v", name, err)
