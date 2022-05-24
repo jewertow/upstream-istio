@@ -17,6 +17,15 @@ spec:
         host: istio-egressgateway.istio-system.svc.cluster.local
         port:
           number: 443
+  tcp:
+  - match:
+    - port: 8080
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        subset: originate-tls-for-plain-traffic
+        port:
+          number: 443
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService

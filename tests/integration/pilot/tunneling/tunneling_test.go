@@ -45,8 +45,14 @@ type tunnelingTestCase struct {
 	// name must be unique, because it's used in the requested URL and then it's searched for in the access.log file,
 	// so a duplicated name would make test false positive
 	name string
-	// protocolsToTest specifies what types of requests to test; it can contain "http" or "https" values
-	protocolsToTest []string
+	// requestsSpec specifies what types of requests to execute and what protocols are expected on the destination side;
+	// requested and expected protocols are different when TLS is originating
+	requestsSpec []testRequestSpec
+}
+
+type testRequestSpec struct {
+	requestedProtocol string
+	expectedProtocol  string
 }
 
 var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
@@ -72,22 +78,43 @@ var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
 	},
 }
 
+var basicRequestsSpec = []testRequestSpec{
+	{
+		requestedProtocol: "http",
+		expectedProtocol:  "http",
+	},
+	{
+		requestedProtocol: "https",
+		expectedProtocol:  "https",
+	},
+}
+
 var testCases = []tunnelingTestCase{
 	{
-		name:            "gateway/tcp",
-		protocolsToTest: []string{"http", "https"},
+		name:         "sidecar",
+		requestsSpec: basicRequestsSpec,
+	},
+	{
+		name:         "gateway/tcp",
+		requestsSpec: basicRequestsSpec,
 	},
 	//{
-	//	name:            "gateway/tls/istio-mutual",
-	//	protocolsToTest: []string{"http", "https"},
+	//	name:         "gateway/tls/istio-mutual",
+	//	requestsSpec: basicRequestsSpec,
 	//},
 	{
-		name:            "gateway/tls/passthrough",
-		protocolsToTest: []string{"https"},
-	},
-	{
-		name:            "sidecar",
-		protocolsToTest: []string{"http", "https"},
+		name: "gateway/tls/passthrough",
+		requestsSpec: []testRequestSpec{
+			{
+				// TLS originating
+				requestedProtocol: "http",
+				expectedProtocol:  "https",
+			},
+			{
+				requestedProtocol: "https",
+				expectedProtocol:  "https",
+			},
+		},
 	},
 }
 
@@ -174,15 +201,15 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).ApplyOrFail(ctx)
 			}
 
-			for _, protocol := range tc.protocolsToTest {
-				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.name, protocol)
+			for _, requestSpec := range tc.requestsSpec {
+				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.name, requestSpec.requestedProtocol)
 				ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
 					// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
 					retry.UntilSuccessOrFail(ctx, func() error {
-						if err := executeRequestToExternalApp(ctx, meshNs.Name(), protocol, tc.name); err != nil {
+						if err := executeRequestToExternalApp(ctx, meshNs.Name(), requestSpec.requestedProtocol, tc.name); err != nil {
 							return err
 						}
-						if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, protocol, tc.name); err != nil {
+						if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, requestSpec.expectedProtocol, tc.name); err != nil {
 							return err
 						}
 						return nil
