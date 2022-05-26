@@ -8,6 +8,6 @@ spec:
   location: MESH_EXTERNAL
   ports:
   - number: {{ .port }}
-    name: http
+    name: connect
     protocol: {{ .protocol }}
   resolution: DNS

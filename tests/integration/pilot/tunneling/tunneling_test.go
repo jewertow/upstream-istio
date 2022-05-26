@@ -42,9 +42,8 @@ import (
 )
 
 type tunnelingTestCase struct {
-	// name must be unique, because it's used in the requested URL and then it's searched for in the access.log file,
-	// so a duplicated name would make test false positive
-	name string
+	// configDir is a directory with Istio configuration files for a particular test case
+	configDir string
 	// requestsSpec specifies what types of requests to execute and what protocols are expected on the destination side;
 	// requested and expected protocols are different when TLS is originating
 	requestsSpec []testRequestSpec
@@ -91,19 +90,19 @@ var basicRequestsSpec = []testRequestSpec{
 
 var testCases = []tunnelingTestCase{
 	{
-		name:         "sidecar",
+		configDir:    "sidecar",
 		requestsSpec: basicRequestsSpec,
 	},
 	{
-		name:         "gateway/tcp",
+		configDir:    "gateway/tcp",
 		requestsSpec: basicRequestsSpec,
 	},
 	//{
-	//	name:         "gateway/tls/istio-mutual",
+	//	configDir:    "gateway/tls/istio-mutual",
 	//	requestsSpec: basicRequestsSpec,
 	//},
 	{
-		name: "gateway/tls/passthrough",
+		configDir: "gateway/tls/passthrough",
 		requestsSpec: []testRequestSpec{
 			{
 				// TLS originating
@@ -197,19 +196,19 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 		ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, "forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
 
 		for _, tc := range testCases {
-			for _, res := range listFilesInDirectory(ctx, tc.name) {
+			for _, res := range listFilesInDirectory(ctx, tc.configDir) {
 				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).ApplyOrFail(ctx)
 			}
 
 			for _, requestSpec := range tc.requestsSpec {
-				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.name, requestSpec.requestedProtocol)
+				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.configDir, requestSpec.requestedProtocol)
 				ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
 					// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
 					retry.UntilSuccessOrFail(ctx, func() error {
-						if err := executeRequestToExternalApp(ctx, meshNs.Name(), requestSpec.requestedProtocol, tc.name); err != nil {
+						if err := executeRequestToExternalApp(ctx, meshNs.Name(), requestSpec.requestedProtocol, tc.configDir); err != nil {
 							return err
 						}
-						if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, requestSpec.expectedProtocol, tc.name); err != nil {
+						if err := verifyThatRequestWasTunneled(ctx, externalNs.Name(), externalForwardProxyIP, requestSpec.expectedProtocol, tc.configDir); err != nil {
 							return err
 						}
 						return nil
@@ -217,7 +216,7 @@ func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
 				})
 			}
 
-			for _, res := range listFilesInDirectory(ctx, tc.name) {
+			for _, res := range listFilesInDirectory(ctx, tc.configDir) {
 				ctx.ConfigIstio().EvalFile(meshNs.Name(), templateParams, res).DeleteOrFail(ctx)
 			}
 
