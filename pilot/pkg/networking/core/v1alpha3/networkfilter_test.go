@@ -27,7 +27,6 @@ import (
 
 	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/model"
-	"istio.io/istio/pilot/pkg/networking/core/v1alpha3/tunnelingconfig"
 	"istio.io/istio/pilot/pkg/networking/telemetry"
 	"istio.io/istio/pilot/test/xdstest"
 	"istio.io/istio/pkg/config"
@@ -149,12 +148,13 @@ func TestInboundNetworkFilterIdleTimeout(t *testing.T) {
 	}
 }
 
-func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *testing.T) {
+func TestBuildOutboundNetworkFiltersTunnelingConfig(t *testing.T) {
 	type tunnelingConfig struct {
 		hostname string
 		usePost  bool
 	}
 
+	ns := "not-default"
 	tunnelingEnabled := &networking.DestinationRule{
 		Host: "tunnel-proxy.com",
 		TrafficPolicy: &networking.TrafficPolicy{
@@ -180,21 +180,55 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 			},
 		},
 	}
+	weightedRouteDestinations := []*networking.RouteDestination{
+		{
+			Destination: &networking.Destination{
+				Host:   "tunnel-proxy.com",
+				Port:   &networking.PortSelector{Number: 3128},
+				Subset: "v1",
+			},
+			Weight: 25,
+		},
+		{
+			Destination: &networking.Destination{
+				Host:   "tunnel-proxy.com",
+				Port:   &networking.PortSelector{Number: 3128},
+				Subset: "v2",
+			},
+			Weight: 75,
+		},
+	}
 
 	testCases := []struct {
 		name                    string
+		routeDestinations       []*networking.RouteDestination
 		destinationRule         *networking.DestinationRule
-		subset                  string
 		expectedTunnelingConfig *tunnelingConfig
 	}{
 		{
-			name:                    "tunneling_config should not be applied when destination rule and listener subsets do not match",
+			name: "tunneling_config should not be applied when destination rule and listener subsets do not match",
+			routeDestinations: []*networking.RouteDestination{
+				{
+					Destination: &networking.Destination{
+						Host:   "tunnel-proxy.com",
+						Port:   &networking.PortSelector{Number: 3128},
+						Subset: "random-subset",
+					},
+				},
+			},
 			destinationRule:         tunnelingEnabledForSubset,
-			subset:                  "another-subset",
 			expectedTunnelingConfig: nil,
 		},
 		{
-			name:            "tunneling_config should be applied when hosts array contains exactly 1 host and destination rule has defined tunneling settings",
+			name: "tunneling_config should be applied when destination rule has specified tunnel settings",
+			routeDestinations: []*networking.RouteDestination{
+				{
+					Destination: &networking.Destination{
+						Host: "tunnel-proxy.com",
+						Port: &networking.PortSelector{Number: 3128},
+					},
+				},
+			},
 			destinationRule: tunnelingEnabled,
 			expectedTunnelingConfig: &tunnelingConfig{
 				hostname: "example.com:8443",
@@ -202,14 +236,38 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 			},
 		},
 		{
-			name: "tunneling_config should be applied when hosts array contains exactly 1 host and " +
-				"destination rule has defined tunneling settings for a subset",
+			name: "tunneling_config should be applied when destination rule has specified tunnel settings for a subset matching the destination route subset",
+			routeDestinations: []*networking.RouteDestination{
+				{
+					Destination: &networking.Destination{
+						Host:   "tunnel-proxy.com",
+						Port:   &networking.PortSelector{Number: 3128},
+						Subset: "example-com-8443",
+					},
+				},
+			},
 			destinationRule: tunnelingEnabledForSubset,
-			subset:          "example-com-8443",
 			expectedTunnelingConfig: &tunnelingConfig{
 				hostname: "example.com:8443",
 				usePost:  true,
 			},
+		},
+		{
+			name: "tunneling_config should be applied when multiple destination routes with weights are specified" +
+				" and destination rule with tunnel settings has no subset",
+			routeDestinations: weightedRouteDestinations,
+			destinationRule:   tunnelingEnabled,
+			expectedTunnelingConfig: &tunnelingConfig{
+				hostname: "example.com:8443",
+				usePost:  false,
+			},
+		},
+		{
+			name: "tunneling_config should not be applied when multiple destination routes with weights are specified " +
+				"and destination rule has tunnel settings for a subset",
+			routeDestinations:       weightedRouteDestinations,
+			destinationRule:         tunnelingEnabledForSubset,
+			expectedTunnelingConfig: nil,
 		},
 	}
 
@@ -219,18 +277,21 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 				Meta: config.Meta{
 					GroupVersionKind: collections.IstioNetworkingV1Alpha3Destinationrules.Resource().GroupVersionKind(),
 					Name:             "tunnel-config",
-					Namespace:        "not-default",
+					Namespace:        ns,
 				},
 				Spec: tt.destinationRule,
 			}
 			cg := NewConfigGenTest(t, TestOptions{
 				ConfigPointers: []*config.Config{&destinationRuleConfig},
-				Services:       []*model.Service{buildServiceWithPort("example.com", 443, protocol.TLS, tnow)},
+				Services: []*model.Service{
+					buildServiceWithPort("example.com", 443, protocol.TLS, tnow),
+					buildServiceWithPort("tunnel-proxy.com", 3128, protocol.HTTP, tnow),
+				},
 			})
-			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: "not-default"})
+			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: ns})
 
-			filters := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
-				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.Builder)
+			filters := buildOutboundNetworkFilters(proxy, tt.routeDestinations, cg.PushContext(),
+				&model.Port{Port: 443}, config.Meta{Name: "routing-config-for-example-com", Namespace: ns})
 
 			tcpProxy := xdstest.ExtractTCPProxy(t, &listener.FilterChain{Filters: filters})
 			if tt.expectedTunnelingConfig == nil {
@@ -240,38 +301,12 @@ func TestBuildOutboundNetworkFiltersWithSingleDestinationForTunnelingConfig(t *t
 			} else {
 				if tcpProxy.TunnelingConfig.GetHostname() != tt.expectedTunnelingConfig.hostname {
 					t.Fatalf("Expected to get tunneling_config.hostname: %s, but got: %s",
-						tcpProxy.TunnelingConfig.GetHostname(), tt.expectedTunnelingConfig.hostname)
+						tt.expectedTunnelingConfig.hostname, tcpProxy.TunnelingConfig.GetHostname())
 				}
 				if tcpProxy.TunnelingConfig.GetUsePost() != tt.expectedTunnelingConfig.usePost {
 					t.Fatalf("Expected to get tunneling_config.use_post: %t, but got: %t",
-						tcpProxy.TunnelingConfig.GetUsePost(), tt.expectedTunnelingConfig.usePost)
+						tt.expectedTunnelingConfig.usePost, tcpProxy.TunnelingConfig.GetUsePost())
 				}
-			}
-		})
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			destinationRuleConfig := config.Config{
-				Meta: config.Meta{
-					GroupVersionKind: collections.IstioNetworkingV1Alpha3Destinationrules.Resource().GroupVersionKind(),
-					Name:             "tunnel-config",
-					Namespace:        "not-default",
-				},
-				Spec: tt.destinationRule,
-			}
-			cg := NewConfigGenTest(t, TestOptions{
-				ConfigPointers: []*config.Config{&destinationRuleConfig},
-				Services:       []*model.Service{buildServiceWithPort("example.com", 443, protocol.TLS, tnow)},
-			})
-			proxy := cg.SetupProxy(&model.Proxy{ConfigNamespace: "not-default"})
-
-			filters := buildOutboundNetworkFiltersWithSingleDestination(cg.PushContext(), proxy, "", "",
-				tt.subset, &model.Port{Port: 80}, tt.destinationRule, tunnelingconfig.NilBuilder)
-
-			tcpProxy := xdstest.ExtractTCPProxy(t, &listener.FilterChain{Filters: filters})
-			if tcpProxy.TunnelingConfig != nil {
-				t.Fatalf("Unexpected tunneling config in TcpProxy filter: %s", filters[0].String())
 			}
 		})
 	}

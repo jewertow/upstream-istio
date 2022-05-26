@@ -138,6 +138,9 @@ func buildOutboundNetworkFiltersWithWeightedClusters(node *model.Proxy, routes [
 
 	// For weighted clusters set hash policy if any of the upstream destinations have sourceIP.
 	maybeSetHashPolicy(destinationRule, tcpProxy, "")
+	// In case of weighted clusters, tunneling config for a subset is ignored,
+	// because it is set on listener, not on a cluster.
+	tunnelingconfig.Builder(tcpProxy, destinationRule, "")
 
 	// TODO: Need to handle multiple cluster names for Redis
 	clusterName := clusterSpecifier.WeightedClusters.Clusters[0].Name
