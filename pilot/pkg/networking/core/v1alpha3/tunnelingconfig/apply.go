@@ -22,10 +22,10 @@ import (
 	networking "istio.io/api/networking/v1alpha3"
 )
 
-type BuilderFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.DestinationRule, subsetName string)
+type ApplyFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.DestinationRule, subsetName string)
 
-// Builder configures tunneling_config in a given TcpProxy depending on the destination rule and the destination hosts
-var Builder BuilderFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.DestinationRule, subsetName string) {
+// Apply configures tunneling_config in a given TcpProxy depending on the destination rule and the destination hosts
+var Apply ApplyFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.DestinationRule, subsetName string) {
 	var tunnelSettings *networking.TrafficPolicy_TunnelSettings
 	if subsetName != "" {
 		for _, s := range destinationRule.GetSubsets() {
@@ -48,5 +48,5 @@ var Builder BuilderFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networki
 	}
 }
 
-// NilBuilder has no effect; its only purpose is to avoid passing nil values for BuilderFunc arguments
-var NilBuilder BuilderFunc = func(_ *tcp.TcpProxy, _ *networking.DestinationRule, _ string) {}
+// Skip has no effect; its only purpose is to avoid passing nil values for ApplyFunc arguments
+var Skip ApplyFunc = func(_ *tcp.TcpProxy, _ *networking.DestinationRule, _ string) {}

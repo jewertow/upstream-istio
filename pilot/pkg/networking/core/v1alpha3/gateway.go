@@ -904,7 +904,7 @@ func builtAutoPassthroughFilterChains(push *model.PushContext, proxy *model.Prox
 				match:      &listener.FilterChainMatch{ApplicationProtocols: allIstioMtlsALPNs},
 				tlsContext: nil, // NO TLS context because this is passthrough
 				networkFilters: buildOutboundNetworkFiltersWithSingleDestination(
-					push, proxy, statPrefix, clusterName, "", port, destinationRule, tunnelingconfig.NilBuilder),
+					push, proxy, statPrefix, clusterName, "", port, destinationRule, tunnelingconfig.Skip),
 			})
 
 			// Do the same, but for each subset
@@ -920,7 +920,7 @@ func builtAutoPassthroughFilterChains(push *model.PushContext, proxy *model.Prox
 					match:      &listener.FilterChainMatch{ApplicationProtocols: allIstioMtlsALPNs},
 					tlsContext: nil, // NO TLS context because this is passthrough
 					networkFilters: buildOutboundNetworkFiltersWithSingleDestination(
-						push, proxy, subsetStatPrefix, subsetClusterName, subset.Name, port, destinationRule, tunnelingconfig.NilBuilder),
+						push, proxy, subsetStatPrefix, subsetClusterName, subset.Name, port, destinationRule, tunnelingconfig.Skip),
 				})
 			}
 		}

@@ -206,7 +206,7 @@ func buildSidecarOutboundTLSFilterChainOpts(node *model.Proxy, push *model.PushC
 			sniHosts:         sniHosts,
 			destinationCIDRs: []string{destinationCIDR},
 			networkFilters: buildOutboundNetworkFiltersWithSingleDestination(push, node, statPrefix, clusterName, "",
-				listenPort, destinationRule, tunnelingconfig.NilBuilder),
+				listenPort, destinationRule, tunnelingconfig.Skip),
 		})
 	}
 
@@ -314,7 +314,7 @@ TcpLoop:
 		out = append(out, &filterChainOpts{
 			destinationCIDRs: []string{destinationCIDR},
 			networkFilters: buildOutboundNetworkFiltersWithSingleDestination(push, node, statPrefix, clusterName, "",
-				listenPort, destinationRule, tunnelingconfig.NilBuilder),
+				listenPort, destinationRule, tunnelingconfig.Skip),
 		})
 	}
 

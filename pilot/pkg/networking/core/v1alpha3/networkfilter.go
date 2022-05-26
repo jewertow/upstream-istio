@@ -82,7 +82,7 @@ func setAccessLogAndBuildTCPFilter(push *model.PushContext, node *model.Proxy, c
 // buildOutboundNetworkFiltersWithSingleDestination takes a single cluster name
 // and builds a stack of network filters.
 func buildOutboundNetworkFiltersWithSingleDestination(push *model.PushContext, node *model.Proxy,
-	statPrefix, clusterName, subsetName string, port *model.Port, destinationRule *networking.DestinationRule, tunnelingConfigBuilder tunnelingconfig.BuilderFunc,
+	statPrefix, clusterName, subsetName string, port *model.Port, destinationRule *networking.DestinationRule, applyTunnelingConfig tunnelingconfig.ApplyFunc,
 ) []*listener.Filter {
 	tcpProxy := &tcp.TcpProxy{
 		StatPrefix:       statPrefix,
@@ -94,7 +94,7 @@ func buildOutboundNetworkFiltersWithSingleDestination(push *model.PushContext, n
 		tcpProxy.IdleTimeout = durationpb.New(idleTimeout)
 	}
 	maybeSetHashPolicy(destinationRule, tcpProxy, subsetName)
-	tunnelingConfigBuilder(tcpProxy, destinationRule, subsetName)
+	applyTunnelingConfig(tcpProxy, destinationRule, subsetName)
 	class := model.OutboundListenerClass(node.Type)
 	tcpFilter := setAccessLogAndBuildTCPFilter(push, node, tcpProxy, class)
 
@@ -140,7 +140,7 @@ func buildOutboundNetworkFiltersWithWeightedClusters(node *model.Proxy, routes [
 	maybeSetHashPolicy(destinationRule, tcpProxy, "")
 	// In case of weighted clusters, tunneling config for a subset is ignored,
 	// because it is set on listener, not on a cluster.
-	tunnelingconfig.Builder(tcpProxy, destinationRule, "")
+	tunnelingconfig.Apply(tcpProxy, destinationRule, "")
 
 	// TODO: Need to handle multiple cluster names for Redis
 	clusterName := clusterSpecifier.WeightedClusters.Clusters[0].Name
@@ -233,7 +233,7 @@ func buildOutboundNetworkFilters(node *model.Proxy,
 		}
 
 		return buildOutboundNetworkFiltersWithSingleDestination(
-			push, node, statPrefix, clusterName, routes[0].Destination.Subset, port, destinationRule, tunnelingconfig.Builder)
+			push, node, statPrefix, clusterName, routes[0].Destination.Subset, port, destinationRule, tunnelingconfig.Apply)
 	}
 	return buildOutboundNetworkFiltersWithWeightedClusters(node, routes, push, port, configMeta, destinationRule)
 }
@@ -262,7 +262,7 @@ func buildOutboundAutoPassthroughFilterStack(push *model.PushContext, node *mode
 	// First build tcp with access logs
 	// then add sni_cluster to the front
 	tcpProxy := buildOutboundNetworkFiltersWithSingleDestination(push, node, util.BlackHoleCluster, util.BlackHoleCluster,
-		"", port, nil, tunnelingconfig.NilBuilder)
+		"", port, nil, tunnelingconfig.Skip)
 	filterstack := make([]*listener.Filter, 0)
 	filterstack = append(filterstack, &listener.Filter{
 		Name: util.SniClusterFilter,
