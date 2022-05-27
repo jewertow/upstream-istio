@@ -1329,14 +1329,13 @@ func validateTunnelSettings(tunnel *networking.TrafficPolicy_TunnelSettings) (er
 	if tunnel.Protocol != "connect" && tunnel.Protocol != "post" {
 		errs = appendErrors(errs, fmt.Errorf("tunnel protocol must be \"connect\" or \"post\""))
 	}
-	if tunnel.TargetHost == "" {
-		errs = appendErrors(errs, fmt.Errorf("tunnel target host must be specified"))
+	fqdnErr := ValidateFQDN(tunnel.TargetHost)
+	ipErr := ValidateIPAddress(tunnel.TargetHost)
+	if fqdnErr != nil && ipErr != nil {
+		errs = appendErrors(errs, fmt.Errorf("tunnel target host must be valid FQDN or IP address: %s; %s", fqdnErr, ipErr))
 	}
-	if strings.Contains(tunnel.TargetHost, "*") {
-		errs = appendErrors(errs, fmt.Errorf("tunnel target host must be FQDN or IP address"))
-	}
-	if tunnel.TargetPort == 0 {
-		errs = appendErrors(errs, fmt.Errorf("tunnel target port cannot be 0"))
+	if err := ValidatePort(int(tunnel.TargetPort)); err != nil {
+		errs = appendErrors(errs, fmt.Errorf("tunnel target port is invalid: %s", err))
 	}
 	return
 }
