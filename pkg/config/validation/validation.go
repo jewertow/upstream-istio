@@ -1326,7 +1326,7 @@ func validateTunnelSettings(tunnel *networking.TrafficPolicy_TunnelSettings) (er
 	if tunnel.Protocol == "" {
 		errs = appendErrors(errs, fmt.Errorf("tunnel protocol must be specified"))
 	}
-	if tunnel.Protocol != "connect" && tunnel.Protocol != "post" {
+	if tunnel.Protocol != "CONNECT" && tunnel.Protocol != "POST" {
 		errs = appendErrors(errs, fmt.Errorf("tunnel protocol must be \"connect\" or \"post\""))
 	}
 	fqdnErr := ValidateFQDN(tunnel.TargetHost)

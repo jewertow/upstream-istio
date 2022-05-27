@@ -8,7 +8,7 @@ spec:
   - name: external-app-8080
     trafficPolicy:
       tunnel:
-        protocol: connect
+        protocol: CONNECT
         targetHost: external-app.testdomain
         targetPort: 8080
     {{ if .tlsEnabled }}
@@ -22,7 +22,7 @@ spec:
   - name: external-app-443
     trafficPolicy:
       tunnel:
-        protocol: connect
+        protocol: CONNECT
         targetHost: external-app.testdomain
         targetPort: 443
     {{ if .tlsEnabled }}

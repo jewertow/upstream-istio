@@ -2146,7 +2146,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetHost: "example.com",
 					TargetPort: 80,
 				},
@@ -2156,7 +2156,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "post",
+					Protocol:   "POST",
 					TargetHost: "example.com",
 					TargetPort: 80,
 				},
@@ -2169,7 +2169,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 					Name: "reviews-80",
 					TrafficPolicy: &networking.TrafficPolicy{
 						Tunnel: &networking.TrafficPolicy_TunnelSettings{
-							Protocol:   "connect",
+							Protocol:   "CONNECT",
 							TargetHost: "example.com",
 							TargetPort: 80,
 						},
@@ -2184,7 +2184,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 					Name: "example-com-80",
 					TrafficPolicy: &networking.TrafficPolicy{
 						Tunnel: &networking.TrafficPolicy_TunnelSettings{
-							Protocol:   "post",
+							Protocol:   "POST",
 							TargetHost: "example.com",
 							TargetPort: 80,
 						},
@@ -2196,7 +2196,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetHost: "192.168.1.2",
 					TargetPort: 80,
 				},
@@ -2206,7 +2206,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetHost: "2001:db8:1234::",
 					TargetPort: 80,
 				},
@@ -2285,7 +2285,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetHost: "*.example.com",
 					TargetPort: 80,
 				},
@@ -2295,7 +2295,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetHost: "example.com",
 					TargetPort: 0,
 				},
@@ -2314,7 +2314,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetPort: 80,
 				},
 			},
@@ -2323,7 +2323,7 @@ func TestValidateDestinationWithInheritance(t *testing.T) {
 			Host: "tunnel-proxy.com",
 			TrafficPolicy: &networking.TrafficPolicy{
 				Tunnel: &networking.TrafficPolicy_TunnelSettings{
-					Protocol:   "connect",
+					Protocol:   "CONNECT",
 					TargetHost: "example.com",
 				},
 			},

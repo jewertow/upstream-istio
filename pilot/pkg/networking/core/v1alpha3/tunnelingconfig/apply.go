@@ -45,7 +45,7 @@ var Apply ApplyFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.D
 
 	tcpProxy.TunnelingConfig = &tcp.TcpProxy_TunnelingConfig{
 		Hostname: net.JoinHostPort(tunnelSettings.GetTargetHost(), strconv.Itoa(int(tunnelSettings.GetTargetPort()))),
-		UsePost:  tunnelSettings.Protocol == "post",
+		UsePost:  tunnelSettings.Protocol == "POST",
 	}
 }
 
