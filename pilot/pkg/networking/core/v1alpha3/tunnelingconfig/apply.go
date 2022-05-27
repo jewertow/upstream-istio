@@ -15,7 +15,8 @@
 package tunnelingconfig
 
 import (
-	"fmt"
+	"net"
+	"strconv"
 
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 
@@ -43,7 +44,7 @@ var Apply ApplyFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.D
 	}
 
 	tcpProxy.TunnelingConfig = &tcp.TcpProxy_TunnelingConfig{
-		Hostname: fmt.Sprintf("%s:%d", tunnelSettings.GetTargetHost(), tunnelSettings.GetTargetPort()),
+		Hostname: net.JoinHostPort(tunnelSettings.GetTargetHost(), strconv.Itoa(int(tunnelSettings.GetTargetPort()))),
 		UsePost:  tunnelSettings.Protocol == "post",
 	}
 }

@@ -198,6 +198,14 @@ func TestBuildOutboundNetworkFiltersTunnelingConfig(t *testing.T) {
 			Weight: 75,
 		},
 	}
+	tunnelProxyDestination := []*networking.RouteDestination{
+		{
+			Destination: &networking.Destination{
+				Host: "tunnel-proxy.com",
+				Port: &networking.PortSelector{Number: 3128},
+			},
+		},
+	}
 
 	testCases := []struct {
 		name                    string
@@ -220,18 +228,47 @@ func TestBuildOutboundNetworkFiltersTunnelingConfig(t *testing.T) {
 			expectedTunnelingConfig: nil,
 		},
 		{
-			name: "tunneling_config should be applied when destination rule has specified tunnel settings",
-			routeDestinations: []*networking.RouteDestination{
-				{
-					Destination: &networking.Destination{
-						Host: "tunnel-proxy.com",
-						Port: &networking.PortSelector{Number: 3128},
+			name:              "tunneling_config should be applied when destination rule has specified tunnel settings",
+			routeDestinations: tunnelProxyDestination,
+			destinationRule:   tunnelingEnabled,
+			expectedTunnelingConfig: &tunnelingConfig{
+				hostname: "example.com:8443",
+				usePost:  false,
+			},
+		},
+		{
+			name:              "tunneling_config should be applied when destination rule has specified tunnel settings and the target host is an IPv4 address",
+			routeDestinations: tunnelProxyDestination,
+			destinationRule: &networking.DestinationRule{
+				Host: "tunnel-proxy.com",
+				TrafficPolicy: &networking.TrafficPolicy{
+					Tunnel: &networking.TrafficPolicy_TunnelSettings{
+						Protocol:   "connect",
+						TargetHost: "192.168.1.2",
+						TargetPort: 8443,
 					},
 				},
 			},
-			destinationRule: tunnelingEnabled,
 			expectedTunnelingConfig: &tunnelingConfig{
-				hostname: "example.com:8443",
+				hostname: "192.168.1.2:8443",
+				usePost:  false,
+			},
+		},
+		{
+			name:              "tunneling_config should be applied when destination rule has specified tunnel settings and the target host is an IPv6 address",
+			routeDestinations: tunnelProxyDestination,
+			destinationRule: &networking.DestinationRule{
+				Host: "tunnel-proxy.com",
+				TrafficPolicy: &networking.TrafficPolicy{
+					Tunnel: &networking.TrafficPolicy_TunnelSettings{
+						Protocol:   "connect",
+						TargetHost: "2001:db8:1234::",
+						TargetPort: 8443,
+					},
+				},
+			},
+			expectedTunnelingConfig: &tunnelingConfig{
+				hostname: "[2001:db8:1234::]:8443",
 				usePost:  false,
 			},
 		},
