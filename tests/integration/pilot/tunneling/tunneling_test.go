@@ -97,10 +97,10 @@ var testCases = []tunnelingTestCase{
 		configDir:    "gateway/tcp",
 		requestsSpec: basicRequestsSpec,
 	},
-	//{
-	//	configDir:    "gateway/tls/istio-mutual",
-	//	requestsSpec: basicRequestsSpec,
-	//},
+	{
+		configDir:    "gateway/tls/istio-mutual",
+		requestsSpec: basicRequestsSpec,
+	},
 	{
 		configDir: "gateway/tls/passthrough",
 		requestsSpec: []testRequestSpec{
