@@ -46,6 +46,6 @@ spec:
     route:
     - destination:
         host: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
-        subset: external-svc-https
+        subset: external-svc-tls
         port:
           number: {{ .forwardProxyPort }}

@@ -1,5 +1,3 @@
-# TODO: move TLS origination to a dedicated destination rule
-# TODO: rename .port to .forwardProxyPort
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:
@@ -7,31 +5,31 @@ metadata:
 spec:
   host: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
   subsets:
-  - name: external-svc-http
+  - name: external-svc-tcp
     trafficPolicy:
       tunnel:
         protocol: CONNECT
         targetHost: external.{{ .externalNamespace }}.svc.cluster.local
         targetPort: {{ .externalSvcTcpPort }}
-    {{ if .tlsEnabled }}
-      portLevelSettings:
-      - port:
-          number: {{ .forwardProxyPort }}
-        tls:
-          mode: SIMPLE
-          sni: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
-    {{ end }}
-  - name: external-svc-https
+  - name: external-svc-tls
     trafficPolicy:
       tunnel:
         protocol: CONNECT
         targetHost: external.{{ .externalNamespace }}.svc.cluster.local
         targetPort: {{ .externalSvcTlsPort }}
-    {{ if .tlsEnabled }}
-      portLevelSettings:
-      - port:
-          number: {{ .forwardProxyPort }}
-        tls:
-          mode: SIMPLE
-          sni: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
-    {{ end }}
+---
+{{ if .tlsEnabled }}
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: originate-tls-for-outbound-traffic-to-external-forward-proxy
+spec:
+  host: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
+  trafficPolicy:
+    portLevelSettings:
+    - port:
+        number: {{ .forwardProxyPort }}
+      tls:
+        mode: SIMPLE
+        sni: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
+{{ end }}
