@@ -188,12 +188,12 @@ func createTransportSocket(tlsEnabled bool) *envoy_core.TransportSocket {
 						{
 							CertificateChain: &envoy_core.DataSource{
 								Specifier: &envoy_core.DataSource_Filename{
-									Filename: "/etc/pki/tls/certs/external-forward-proxy.testdomain.crt",
+									Filename: "/etc/envoy/external-forward-proxy-cert.pem",
 								},
 							},
 							PrivateKey: &envoy_core.DataSource{
 								Specifier: &envoy_core.DataSource_Filename{
-									Filename: "/etc/pki/tls/private/external-forward-proxy.testdomain.key",
+									Filename: "/etc/envoy/external-forward-proxy-key.pem",
 								},
 							},
 						},

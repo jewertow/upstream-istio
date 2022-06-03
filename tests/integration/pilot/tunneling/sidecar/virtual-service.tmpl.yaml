@@ -9,7 +9,7 @@ spec:
   - mesh
   tcp:
   - match:
-    - port: {{ .httpPort }}
+    - port: {{ .externalSvcTcpPort }}
     route:
     - destination:
         host: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
@@ -20,7 +20,7 @@ spec:
   - match:
     - sniHosts:
       - external.{{ .externalNamespace }}.svc.cluster.local
-      port: {{ .httpsPort }}
+      port: {{ .externalSvcTlsPort }}
     route:
     - destination:
         host: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local

@@ -19,17 +19,7 @@ spec:
         volumeMounts:
         - name: external-forward-proxy-config
           mountPath: /etc/envoy
-#        - name: ssl-certificate
-#          mountPath: /etc/pki/tls/certs
-#        - name: ssl-private-key
-#          mountPath: /etc/pki/tls/private
       volumes:
       - name: external-forward-proxy-config
         configMap:
           name: external-forward-proxy-config
-#      - name: ssl-certificate
-#        configMap:
-#          name: external-forward-proxy-ssl-certificate
-#      - name: ssl-private-key
-#        configMap:
-#          name: external-forward-proxy-ssl-private-key

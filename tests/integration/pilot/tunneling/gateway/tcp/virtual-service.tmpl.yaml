@@ -9,7 +9,7 @@ spec:
   - mesh
   tcp:
   - match:
-    - port: {{ .httpPort }}
+    - port: {{ .externalSvcTcpPort }}
     route:
     - destination:
         host: istio-egressgateway.istio-system.svc.cluster.local
@@ -17,7 +17,7 @@ spec:
           number: 80
   tls:
   - match:
-    - port: {{ .httpsPort }}
+    - port: {{ .externalSvcTlsPort }}
       sniHosts:
       - external.{{ .externalNamespace }}.svc.cluster.local
     route:

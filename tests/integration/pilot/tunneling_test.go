@@ -40,6 +40,11 @@ import (
 	forward_proxy "istio.io/istio/tests/integration/pilot/tunneling/forward-proxy"
 )
 
+const (
+	http1 = "HTTP1"
+	http2 = "HTTP2"
+)
+
 type tunnelingTestCase struct {
 	// configDir is a directory with Istio configuration files for a particular test case
 	configDir string
@@ -56,21 +61,21 @@ var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
 		HTTPVersion: http1,
 		TLSEnabled:  false,
 	},
-	//{
-	//	Port:        4128,
-	//	HTTPVersion: http1,
-	//	TLSEnabled:  true,
-	//},
+	{
+		Port:        4128,
+		HTTPVersion: http1,
+		TLSEnabled:  true,
+	},
 	{
 		Port:        5128,
 		HTTPVersion: http2,
 		TLSEnabled:  false,
 	},
-	//{
-	//	Port:        6128,
-	//	HTTPVersion: http2,
-	//	TLSEnabled:  true,
-	//},
+	{
+		Port:        6128,
+		HTTPVersion: http2,
+		TLSEnabled:  true,
+	},
 }
 
 var requestsSpec = []testRequestSpec{
@@ -99,11 +104,6 @@ var testCases = []tunnelingTestCase{
 	},
 }
 
-const (
-	http1 = "HTTP1"
-	http2 = "HTTP2"
-)
-
 func TestTunnelingOutboundTraffic(t *testing.T) {
 	framework.
 		NewTest(t).
@@ -112,19 +112,19 @@ func TestTunnelingOutboundTraffic(t *testing.T) {
 			meshNs := apps.A.NamespaceName()
 			externalNs := apps.External.Namespace.Name()
 
-			applyForwardProxyConfigMap(ctx, externalNs)
+			applyForwardProxyConfigMaps(ctx, externalNs)
 			ctx.ConfigIstio().File(externalNs, "tunneling/forward-proxy/deployment.yaml").ApplyOrFail(ctx)
 			applyForwardProxyService(ctx, externalNs, forwardProxyConfigurations)
 			waitForPodsReadyOrFail(ctx, externalNs, "external-forward-proxy")
 			externalForwardProxyIP := getPodIP(ctx, externalNs, "external-forward-proxy")
 
-			for _, proxySettings := range forwardProxyConfigurations {
+			for _, proxyConfig := range forwardProxyConfigurations {
 				templateParams := map[string]interface{}{
-					"forwardProxyPort":  proxySettings.Port,
-					"tlsEnabled":        proxySettings.TLSEnabled,
-					"externalNamespace": externalNs,
-					"httpPort":          apps.External.All.PortForName(ports.TCPForHTTP).ServicePort,
-					"httpsPort":         apps.External.All.PortForName(ports.HTTPS).ServicePort,
+					"externalNamespace":  externalNs,
+					"forwardProxyPort":   proxyConfig.Port,
+					"tlsEnabled":         proxyConfig.TLSEnabled,
+					"externalSvcTcpPort": apps.External.All.PortForName(ports.TCPForHTTP).ServicePort,
+					"externalSvcTlsPort": apps.External.All.PortForName(ports.HTTPS).ServicePort,
 				}
 				ctx.ConfigIstio().EvalFile(externalNs, templateParams, "tunneling/forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
 
@@ -135,7 +135,7 @@ func TestTunnelingOutboundTraffic(t *testing.T) {
 
 					for _, spec := range requestsSpec {
 						testName := fmt.Sprintf("%s/%s/%s/%s-request",
-							proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.configDir, spec.protocol)
+							proxyConfig.HTTPVersion, proxyConfig.TLSEnabledStr(), tc.configDir, spec.protocol)
 						ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
 							// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
 							retry.UntilSuccessOrFail(ctx, func() error {
@@ -208,7 +208,7 @@ func verifyThatRequestWasTunneled(target echo.Instance, expectedSourceIP, expect
 	return nil
 }
 
-func applyForwardProxyConfigMap(ctx framework.TestContext, externalNs string) {
+func applyForwardProxyConfigMaps(ctx framework.TestContext, externalNs string) {
 	kubeClient := ctx.Clusters().Default().Kube()
 
 	bootstrapYaml, err := forward_proxy.GenerateForwardProxyBootstrapConfig(forwardProxyConfigurations)
@@ -216,16 +216,24 @@ func applyForwardProxyConfigMap(ctx framework.TestContext, externalNs string) {
 		ctx.Fatalf("failed to generate bootstrap configuration for external-forward-proxy: %s", err)
 	}
 
+	subject := fmt.Sprintf("external-forward-proxy.%s.svc.cluster.local", externalNs)
+	key, crt, err := forward_proxy.GenerateKeyAndCertificate(subject, ctx.TempDir())
+	if err != nil {
+		ctx.Fatalf("failed to generate private key and certificate: %s", err)
+	}
+
 	cfgMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "external-forward-proxy-config",
 		},
 		Data: map[string]string{
-			"envoy.yaml": bootstrapYaml,
+			"envoy.yaml":                      bootstrapYaml,
+			"external-forward-proxy-key.pem":  key,
+			"external-forward-proxy-cert.pem": crt,
 		},
 	}
 	if _, err := kubeClient.CoreV1().ConfigMaps(externalNs).Create(context.TODO(), cfgMap, metav1.CreateOptions{}); err != nil {
-		ctx.Fatalf("failed to create config map for external-forward-proxy: %s", err)
+		ctx.Fatalf("failed to create config map external-forward-proxy-config: %s", err)
 	}
 }
 
@@ -243,16 +251,16 @@ func applyForwardProxyService(ctx framework.TestContext, externalNs string, conf
 			},
 		},
 	}
-	for _, cfg := range configs {
+	for i, cfg := range configs {
 		svc.Spec.Ports = append(svc.Spec.Ports, corev1.ServicePort{
-			Name:       selectPortName(cfg.HTTPVersion),
+			Name:       fmt.Sprintf("%s-%d", selectPortName(cfg.HTTPVersion), i),
 			Port:       int32(cfg.Port),
 			TargetPort: intstr.FromInt(int(cfg.Port)),
 			Protocol:   corev1.ProtocolTCP,
 		})
 	}
 	if _, err := kubeClient.CoreV1().Services(externalNs).Create(context.TODO(), svc, metav1.CreateOptions{}); err != nil {
-		ctx.Fatalf("failed to create service external-forward-proxy")
+		ctx.Fatalf("failed to create service external-forward-proxy: %s", err)
 	}
 }
 
@@ -297,9 +305,6 @@ func getPodStringProperty(ctx framework.TestContext, ns, selector string, getPod
 		}
 		if len(pods.Items) == 0 {
 			return fmt.Errorf("no pods for selector app=%s", selector)
-		}
-		if len(pods.Items) > 1 {
-			return fmt.Errorf("expected to get only 1 pod for selector app=%s, got: %d", selector, len(pods.Items))
 		}
 		podProperty = getPodProperty(pods.Items[0])
 		return nil
