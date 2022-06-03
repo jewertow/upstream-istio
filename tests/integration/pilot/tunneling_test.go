@@ -43,10 +43,6 @@ import (
 type tunnelingTestCase struct {
 	// configDir is a directory with Istio configuration files for a particular test case
 	configDir string
-	// TODO: remove
-	// requestsSpec specifies what types of requests to execute and what protocols are expected on the destination side;
-	// requested and expected protocols are different when TLS is originating
-	requestsSpec []testRequestSpec
 }
 
 type testRequestSpec struct {
@@ -77,7 +73,7 @@ var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
 	//},
 }
 
-var basicRequestsSpec = []testRequestSpec{
+var requestsSpec = []testRequestSpec{
 	{
 		protocol: protocol.HTTP,
 		portName: ports.TCPForHTTP,
@@ -90,20 +86,16 @@ var basicRequestsSpec = []testRequestSpec{
 
 var testCases = []tunnelingTestCase{
 	{
-		configDir:    "sidecar",
-		requestsSpec: basicRequestsSpec,
+		configDir: "sidecar",
 	},
 	{
-		configDir:    "gateway/tcp",
-		requestsSpec: basicRequestsSpec,
+		configDir: "gateway/tcp",
 	},
 	{
-		configDir:    "gateway/tls/istio-mutual",
-		requestsSpec: basicRequestsSpec,
+		configDir: "gateway/tls/istio-mutual",
 	},
 	{
-		configDir:    "gateway/tls/passthrough",
-		requestsSpec: basicRequestsSpec,
+		configDir: "gateway/tls/passthrough",
 	},
 }
 
@@ -115,73 +107,69 @@ const (
 func TestTunnelingOutboundTraffic(t *testing.T) {
 	framework.
 		NewTest(t).
-		// TODO: rename feature
-		Features("traffic.tunneling.http1_proxy.plain_text").
+		Features("traffic.tunneling").
 		Run(func(ctx framework.TestContext) {
-			runTunnelingTests(t, ctx)
+			meshNs := apps.A.NamespaceName()
+			externalNs := apps.External.Namespace.Name()
+
+			//ctx.ConfigIstio().File(externalNs, "forward-proxy/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
+			//ctx.ConfigIstio().File(externalNs, "forward-proxy/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
+			applyForwardProxyConfigMap(ctx, externalNs)
+			ctx.ConfigIstio().File(externalNs, "tunneling/forward-proxy/deployment.yaml").ApplyOrFail(ctx)
+			applyForwardProxyService(ctx, externalNs, forwardProxyConfigurations)
+			waitForPodsReadyOrFail(ctx, externalNs, "external-forward-proxy")
+			externalForwardProxyIP := getPodIP(ctx, externalNs, "external-forward-proxy")
+
+			for _, proxySettings := range forwardProxyConfigurations {
+				templateParams := map[string]interface{}{
+					"forwardProxyPort":  proxySettings.Port,
+					"tlsEnabled":        proxySettings.TLSEnabled,
+					"externalNamespace": externalNs,
+					"httpPort":          apps.External.All.PortForName(ports.TCPForHTTP).ServicePort,
+					"httpsPort":         apps.External.All.PortForName(ports.HTTPS).ServicePort,
+				}
+				ctx.ConfigIstio().EvalFile(externalNs, templateParams, "tunneling/forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
+
+				for _, tc := range testCases {
+					for _, res := range listFilesInDirectory(ctx, tc.configDir) {
+						ctx.ConfigIstio().EvalFile(meshNs, templateParams, "tunneling/"+res).ApplyOrFail(ctx)
+					}
+
+					for _, spec := range requestsSpec {
+						testName := fmt.Sprintf("%s/%s/%s/%s-request",
+							proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.configDir, spec.protocol)
+						ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
+							// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
+							retry.UntilSuccessOrFail(ctx, func() error {
+								client := apps.A[0]
+								target := apps.External.All[0]
+								if err := testConnectivity(client, target, spec.protocol, spec.portName, testName); err != nil {
+									return err
+								}
+								if err := verifyThatRequestWasTunneled(target, externalForwardProxyIP, testName); err != nil {
+									return err
+								}
+								return nil
+							}, retry.Timeout(10*time.Second))
+						})
+					}
+
+					for _, res := range listFilesInDirectory(ctx, tc.configDir) {
+						ctx.ConfigIstio().EvalFile(meshNs, templateParams, "tunneling/"+res).DeleteOrFail(ctx)
+					}
+
+					// Make sure that configuration changes were pushed to istio-proxies.
+					// Otherwise, test results could be false-positive,
+					// because subsequent test cases could work thanks to previous configurations.
+					waitUntilTunnelingConfigurationIsRemovedOrFail(ctx, meshNs)
+				}
+
+				ctx.ConfigIstio().EvalFile(externalNs, templateParams, "tunneling/forward-proxy/destination-rule.tmpl.yaml").DeleteOrFail(ctx)
+			}
 		})
 }
 
-func runTunnelingTests(t *testing.T, ctx framework.TestContext) {
-	meshNs := apps.A.NamespaceName()
-	externalNs := apps.External.Namespace.Name()
-
-	//ctx.ConfigIstio().File(externalNs, "forward-proxy/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
-	//ctx.ConfigIstio().File(externalNs, "forward-proxy/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
-	applyForwardProxyConfigMap(ctx, externalNs)
-	ctx.ConfigIstio().File(externalNs, "tunneling/forward-proxy/deployment.yaml").ApplyOrFail(ctx)
-	applyForwardProxyService(ctx, externalNs, forwardProxyConfigurations)
-	waitForPodsReadyOrFail(ctx, externalNs, "external-forward-proxy")
-	externalForwardProxyIP := getPodIP(ctx, externalNs, "external-forward-proxy")
-
-	for _, proxySettings := range forwardProxyConfigurations {
-		templateParams := map[string]interface{}{
-			"forwardProxyPort":  proxySettings.Port,
-			"tlsEnabled":        proxySettings.TLSEnabled,
-			"externalNamespace": externalNs,
-			"httpPort":          apps.External.All.PortForName(ports.TCPForHTTP).ServicePort,
-			"httpsPort":         apps.External.All.PortForName(ports.HTTPS).ServicePort,
-		}
-		ctx.ConfigIstio().EvalFile(externalNs, templateParams, "tunneling/forward-proxy/destination-rule.tmpl.yaml").ApplyOrFail(ctx)
-
-		for _, tc := range testCases {
-			for _, res := range listFilesInDirectory(ctx, tc.configDir) {
-				ctx.ConfigIstio().EvalFile(meshNs, templateParams, "tunneling/"+res).ApplyOrFail(ctx)
-			}
-
-			for _, spec := range tc.requestsSpec {
-				testName := fmt.Sprintf("%s/%s/%s/%s-request", proxySettings.HTTPVersion, proxySettings.TLSEnabledStr(), tc.configDir, spec.protocol)
-				ctx.NewSubTest(testName).Run(func(ctx framework.TestContext) {
-					// requests will fail until istio-proxy gets the Envoy configuration from istiod, so retries are necessary
-					retry.UntilSuccessOrFail(ctx, func() error {
-						client := apps.A[0]
-						target := apps.External.All[0]
-						if err := executeRequest(client, target, spec.protocol, spec.portName, testName); err != nil {
-							return err
-						}
-						if err := verifyThatRequestWasTunneled(target, externalForwardProxyIP, testName); err != nil {
-							return err
-						}
-						return nil
-					}, retry.Timeout(10*time.Second))
-				})
-			}
-
-			for _, res := range listFilesInDirectory(ctx, tc.configDir) {
-				ctx.ConfigIstio().EvalFile(meshNs, templateParams, "tunneling/"+res).DeleteOrFail(ctx)
-			}
-
-			// Make sure that configuration changes were pushed to istio-proxies.
-			// Otherwise, test results could be false-positive,
-			// because subsequent test cases could work thanks to previous configurations.
-			waitUntilTunnelingConfigurationIsRemovedOrFail(ctx, meshNs)
-		}
-
-		ctx.ConfigIstio().EvalFile(externalNs, templateParams, "tunneling/forward-proxy/destination-rule.tmpl.yaml").DeleteOrFail(ctx)
-	}
-}
-
-func executeRequest(from, to echo.Instance, p protocol.Instance, portName, testName string) error {
+func testConnectivity(from, to echo.Instance, p protocol.Instance, portName, testName string) error {
 	res, err := from.Call(echo.CallOptions{
 		Address: apps.External.All[0].ClusterLocalFQDN(),
 		Port: echo.Port{
