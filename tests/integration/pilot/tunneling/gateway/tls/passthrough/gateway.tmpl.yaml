@@ -7,18 +7,10 @@ spec:
     istio: egressgateway
   servers:
   - port:
-      number: 80
-      name: http
-      protocol: TLS
-    hosts:
-    - external-app.testdomain
-    tls:
-      mode: ISTIO_MUTUAL
-  - port:
       number: 443
-      name: https
+      name: tls
       protocol: TLS
     hosts:
-    - external-app.testdomain
+    - external.{{ .externalNamespace }}.svc.cluster.local
     tls:
-      mode: ISTIO_MUTUAL
+      mode: PASSTHROUGH

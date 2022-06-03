@@ -1,3 +1,4 @@
+# TODO: Generate certificate dynamically
 apiVersion: v1
 kind: ConfigMap
 metadata:

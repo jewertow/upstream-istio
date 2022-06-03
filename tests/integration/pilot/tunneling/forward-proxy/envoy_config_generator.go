@@ -105,6 +105,11 @@ var dynamicForwardProxyCacheConfig = &envoy_common_dynamic_forward_proxy.DnsCach
 			Resolvers: []*envoy_core.Address{
 				createSocketAddress("8.8.8.8", 53),
 			},
+			DnsResolverOptions: &envoy_core.DnsResolverOptions{
+				UseTcpForDnsLookups:   true,
+				NoDefaultSearchDomain: true,
+			},
+			UseResolversAsFallback: true,
 		}),
 	},
 }

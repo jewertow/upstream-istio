@@ -1,7 +1,7 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:
-  name: originate-tls-for-external-app
+  name: originate-tls-for-external-svc
 spec:
   host: istio-egressgateway.istio-system.svc.cluster.local
   subsets:
@@ -9,4 +9,4 @@ spec:
     trafficPolicy:
       tls:
         mode: SIMPLE
-        sni: external-app.testdomain
+        sni: external.{{ .externalNamespace }}.svc.cluster.local
