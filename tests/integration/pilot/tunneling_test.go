@@ -20,10 +20,6 @@ package pilot
 import (
 	"context"
 	"fmt"
-	"istio.io/istio/pkg/config/protocol"
-	"istio.io/istio/pkg/test/framework/components/echo"
-	"istio.io/istio/pkg/test/framework/components/echo/common/ports"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"os"
 	"strings"
 	"sync"
@@ -32,8 +28,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/test/framework"
+	"istio.io/istio/pkg/test/framework/components/echo"
+	"istio.io/istio/pkg/test/framework/components/echo/common/ports"
 	"istio.io/istio/pkg/test/framework/components/istioctl"
 	kubetest "istio.io/istio/pkg/test/kube"
 	"istio.io/istio/pkg/test/util/retry"
@@ -112,8 +112,6 @@ func TestTunnelingOutboundTraffic(t *testing.T) {
 			meshNs := apps.A.NamespaceName()
 			externalNs := apps.External.Namespace.Name()
 
-			//ctx.ConfigIstio().File(externalNs, "forward-proxy/ssl-certificate-configmap.yaml").ApplyOrFail(ctx)
-			//ctx.ConfigIstio().File(externalNs, "forward-proxy/ssl-private-key-configmap.yaml").ApplyOrFail(ctx)
 			applyForwardProxyConfigMap(ctx, externalNs)
 			ctx.ConfigIstio().File(externalNs, "tunneling/forward-proxy/deployment.yaml").ApplyOrFail(ctx)
 			applyForwardProxyService(ctx, externalNs, forwardProxyConfigurations)
