@@ -50,4 +50,5 @@ var Apply ApplyFunc = func(tcpProxy *tcp.TcpProxy, destinationRule *networking.D
 }
 
 // Skip has no effect; its only purpose is to avoid passing nil values for ApplyFunc arguments
+// when it is not desired to apply `tunneling_config` to a listener, e.g. AUTO_PASSTHROUGH
 var Skip ApplyFunc = func(_ *tcp.TcpProxy, _ *networking.DestinationRule, _ string) {}
