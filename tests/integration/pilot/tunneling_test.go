@@ -40,11 +40,6 @@ import (
 	forward_proxy "istio.io/istio/tests/integration/pilot/tunneling/forward-proxy"
 )
 
-const (
-	http1 = "HTTP1"
-	http2 = "HTTP2"
-)
-
 type tunnelingTestCase struct {
 	// configDir is a directory with Istio configuration files for a particular test case
 	configDir string
@@ -58,22 +53,22 @@ type testRequestSpec struct {
 var forwardProxyConfigurations = []forward_proxy.ListenerSettings{
 	{
 		Port:        3128,
-		HTTPVersion: http1,
+		HTTPVersion: forward_proxy.HTTP1,
 		TLSEnabled:  false,
 	},
 	{
 		Port:        4128,
-		HTTPVersion: http1,
+		HTTPVersion: forward_proxy.HTTP1,
 		TLSEnabled:  true,
 	},
 	{
 		Port:        5128,
-		HTTPVersion: http2,
+		HTTPVersion: forward_proxy.HTTP2,
 		TLSEnabled:  false,
 	},
 	{
 		Port:        6128,
-		HTTPVersion: http2,
+		HTTPVersion: forward_proxy.HTTP2,
 		TLSEnabled:  true,
 	},
 }
@@ -114,7 +109,7 @@ func TestTunnelingOutboundTraffic(t *testing.T) {
 
 			applyForwardProxyConfigMaps(ctx, externalNs)
 			ctx.ConfigIstio().File(externalNs, "tunneling/forward-proxy/deployment.yaml").ApplyOrFail(ctx)
-			applyForwardProxyService(ctx, externalNs, forwardProxyConfigurations)
+			applyForwardProxyService(ctx, externalNs)
 			waitForPodsReadyOrFail(ctx, externalNs, "external-forward-proxy")
 			externalForwardProxyIP := getPodIP(ctx, externalNs, "external-forward-proxy")
 
@@ -237,7 +232,7 @@ func applyForwardProxyConfigMaps(ctx framework.TestContext, externalNs string) {
 	}
 }
 
-func applyForwardProxyService(ctx framework.TestContext, externalNs string, configs []forward_proxy.ListenerSettings) {
+func applyForwardProxyService(ctx framework.TestContext, externalNs string) {
 	kubeClient := ctx.Clusters().Default().Kube()
 
 	svc := &corev1.Service{
@@ -251,7 +246,7 @@ func applyForwardProxyService(ctx framework.TestContext, externalNs string, conf
 			},
 		},
 	}
-	for i, cfg := range configs {
+	for i, cfg := range forwardProxyConfigurations {
 		svc.Spec.Ports = append(svc.Spec.Ports, corev1.ServicePort{
 			Name:       fmt.Sprintf("%s-%d", selectPortName(cfg.HTTPVersion), i),
 			Port:       int32(cfg.Port),
@@ -277,7 +272,7 @@ func listFilesInDirectory(ctx framework.TestContext, dir string) []string {
 }
 
 func selectPortName(httpVersion string) string {
-	if httpVersion == http1 {
+	if httpVersion == forward_proxy.HTTP1 {
 		return "http-connect"
 	}
 	return "http2-connect"

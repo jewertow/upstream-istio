@@ -36,6 +36,11 @@ import (
 	"istio.io/istio/pkg/util/protomarshal"
 )
 
+const (
+	HTTP1 = "HTTP1"
+	HTTP2 = "HTTP2"
+)
+
 type ListenerSettings struct {
 	Port        uint32
 	HTTPVersion string
@@ -162,11 +167,11 @@ func createHTTPConnectionManager(httpVersion string) *envoy_hcm.HttpConnectionMa
 		},
 		StatPrefix: "http_forward_proxy",
 	}
-	if httpVersion == "HTTP1" {
+	if httpVersion == HTTP1 {
 		hcm.CodecType = envoy_hcm.HttpConnectionManager_HTTP1
 		hcm.HttpProtocolOptions = &envoy_core.Http1ProtocolOptions{}
 	}
-	if httpVersion == "HTTP2" {
+	if httpVersion == HTTP2 {
 		hcm.CodecType = envoy_hcm.HttpConnectionManager_HTTP2
 		hcm.Http2ProtocolOptions = &envoy_core.Http2ProtocolOptions{
 			AllowConnect: true,
