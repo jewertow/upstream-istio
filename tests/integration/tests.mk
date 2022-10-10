@@ -116,7 +116,8 @@ test.integration.kube: test.integration.kube.presubmit
 # Presubmit integration tests targeting Kubernetes environment. Really used for postsubmit on different k8s versions.
 .PHONY: test.integration.kube.presubmit
 test.integration.kube.presubmit: | $(JUNIT_REPORT) check-go-tag
-	$(RUN_TEST) ./tests/integration/... -timeout 30m \
+	@echo "kube presubmit"
+	$(RUN_TEST) ./tests/integration/pilot/... -timeout 30m -run ^TestTunnelingOutboundTraffic$ \
 	${_INTEGRATION_TEST_FLAGS} ${_INTEGRATION_TEST_SELECT_FLAGS} \
 	2>&1 | tee >($(JUNIT_REPORT) > $(JUNIT_OUT))
 

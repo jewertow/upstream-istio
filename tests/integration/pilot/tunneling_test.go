@@ -93,9 +93,9 @@ var testCases = []tunnelingTestCase{
 	{
 		configDir: "sidecar",
 	},
-	{
-		configDir: "gateway/tcp",
-	},
+	//{
+	//	configDir: "gateway/tcp",
+	//},
 	{
 		configDir: "gateway/tls/istio-mutual",
 	},
