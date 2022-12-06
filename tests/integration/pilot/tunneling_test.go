@@ -32,6 +32,7 @@ import (
 	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/test/framework"
 	"istio.io/istio/pkg/test/framework/components/echo"
+	"istio.io/istio/pkg/test/framework/components/echo/check"
 	"istio.io/istio/pkg/test/framework/components/echo/common/ports"
 	"istio.io/istio/pkg/test/framework/components/istioctl"
 	kubetest "istio.io/istio/pkg/test/kube"
@@ -179,13 +180,7 @@ func testConnectivity(from, to echo.Instance, p protocol.Instance, portName, tes
 			Path: "/" + testName,
 		},
 	})
-	if err != nil {
-		return fmt.Errorf("failed to request to external service: %s", err)
-	}
-	if res.Responses[0].Code != "200" {
-		return fmt.Errorf("expected to get 200 status code, got: %s", res.Responses[0].Code)
-	}
-	return nil
+	return check.OK().Check(res, err)
 }
 
 func verifyThatRequestWasTunneled(target echo.Instance, expectedSourceIP, expectedPath string) error {
