@@ -115,7 +115,7 @@ func TestTunnelingOutboundTraffic(t *testing.T) {
 			externalNs := apps.External.Namespace.Name()
 
 			applyForwardProxyConfigMaps(ctx, externalNs)
-			ctx.ConfigIstio().File(externalNs, "testdata/external-forward-proxy-deployment.yaml").ApplyOrFail(ctx)
+			ctx.ConfigIstio().File(externalNs, "testdata/forward-proxy/deployment.yaml").ApplyOrFail(ctx)
 			applyForwardProxyService(ctx, externalNs)
 			waitForPodsReadyOrFail(ctx, externalNs, "external-forward-proxy")
 			externalForwardProxyIP := getPodIP(ctx, externalNs, "external-forward-proxy")
