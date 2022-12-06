@@ -130,7 +130,7 @@ type CallOptions struct {
 
 	// NewConnectionPerRequest if true, the forwarder will establish a new connection to the server for
 	// each individual request. If false, it will attempt to reuse the same connection for the duration
-	// of the forward call. This is ignored for DNS, TCP, and TLS protocols, as well as
+	// of the forward call. This is ignored for DNS, TCP, TLS, and HTTP/1.1 protocols, as well as
 	// Headless/StatefulSet deployments.
 	NewConnectionPerRequest bool
 
