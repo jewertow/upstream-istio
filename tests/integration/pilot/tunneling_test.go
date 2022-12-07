@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"testing"
@@ -30,12 +31,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"istio.io/istio/pkg/config/protocol"
+	"istio.io/istio/pkg/test/env"
 	"istio.io/istio/pkg/test/framework"
 	"istio.io/istio/pkg/test/framework/components/echo"
 	"istio.io/istio/pkg/test/framework/components/echo/check"
 	"istio.io/istio/pkg/test/framework/components/echo/common/ports"
 	"istio.io/istio/pkg/test/framework/components/istioctl"
 	kubetest "istio.io/istio/pkg/test/kube"
+	"istio.io/istio/pkg/test/util/file"
 	"istio.io/istio/pkg/test/util/retry"
 	"istio.io/istio/tests/integration/pilot/forwardproxy"
 )
@@ -210,16 +213,10 @@ func applyForwardProxyConfigMaps(ctx framework.TestContext, externalNs string) {
 		ctx.Fatalf("failed to generate bootstrap configuration for external-forward-proxy: %s", err)
 	}
 
-	subject := fmt.Sprintf("external-forward-proxy.%s.svc.cluster.local", externalNs)
-	key, crt, err := forwardproxy.GenerateKeyAndCertificate(subject, ctx.TempDir())
-	if err != nil {
-		ctx.Fatalf("failed to generate private key and certificate: %s", err)
-	}
-
 	templateParams := map[string]any{
 		"envoyYaml": bootstrapYaml,
-		"keyPem":    key,
-		"certPem":   crt,
+		"keyPem":    file.AsStringOrFail(ctx, path.Join(env.IstioSrc, "tests/testdata/certs/external-forward-proxy/key.pem")),
+		"certPem":   file.AsStringOrFail(ctx, path.Join(env.IstioSrc, "tests/testdata/certs/external-forward-proxy/cert-chain.pem")),
 	}
 	ctx.ConfigIstio().EvalFile(externalNs, templateParams, forwardProxyConfigMapFile).ApplyOrFail(ctx)
 }

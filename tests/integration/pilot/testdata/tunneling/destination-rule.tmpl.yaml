@@ -29,5 +29,6 @@ spec:
         number: {{ .forwardProxyPort }}
       tls:
         mode: SIMPLE
-        sni: external-forward-proxy.{{ .externalNamespace }}.svc.cluster.local
+        subjectAltNames:
+        - external-forward-proxy.external.svc.cluster.local
 {{ end }}

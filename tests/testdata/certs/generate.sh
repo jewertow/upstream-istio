@@ -99,6 +99,19 @@ URI = spiffe://cluster.local/ns/mounted-certs/sa/client
 DNS = client.mounted-certs.svc
 EOF
 
+cat > "${WD}/external-forward-proxy.conf" <<EOF
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, serverAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS = external-forward-proxy.external.svc.cluster.local
+EOF
 
 # Create a certificate authority
 openssl genrsa -out "${WD}/pilot/ca-key.pem" 2048
@@ -134,9 +147,16 @@ openssl genrsa -out "${WD}/mountedcerts-client/key.pem" 2048
 openssl req -new -sha256 -key "${WD}/mountedcerts-client/key.pem" -out "${WD}/mountedcerts-client.csr" -subj "/CN=client.mounted-certs.svc.cluster.local" -config "${WD}/mountedcerts-client.conf"
 openssl x509 -req -in "${WD}/mountedcerts-client.csr" -CA "${WD}/pilot/root-cert.pem" -CAkey "${WD}/pilot/ca-key.pem" -CAcreateserial -out "${WD}/mountedcerts-client/cert-chain.pem" -days 100000 -extensions v3_req -extfile "${WD}/mountedcerts-client.conf"
 
+# Create a certificate and CA for external-forward-proxy
+openssl genrsa -out "${WD}/external-forward-proxy/ca-key.pem" 2048
+openssl req -x509 -new -nodes -key "${WD}/external-forward-proxy/ca-key.pem" -days 100000 -out "${WD}/external-forward-proxy/root-cert.pem" -subj "/CN=external.svc.cluster.local"
+openssl genrsa -out "${WD}/external-forward-proxy/key.pem" 2048
+openssl req -new -sha256 -key "${WD}/external-forward-proxy/key.pem" -out "${WD}/external-forward-proxy.csr" -subj "/CN=external-forward-proxy.external.svc.cluster.local" -config "${WD}/external-forward-proxy.conf"
+openssl x509 -req -in "${WD}/external-forward-proxy.csr" -CA "${WD}/external-forward-proxy/root-cert.pem" -CAkey "${WD}/external-forward-proxy/ca-key.pem" -CAcreateserial -out "${WD}/external-forward-proxy/cert-chain.pem" -days 100000 -extensions v3_req -extfile "${WD}/external-forward-proxy.conf"
 
 rm "${WD}/server.conf" "${WD}/client.conf" "${WD}/dns-client.conf"
 rm "${WD}/server.csr" "${WD}/client.csr" "${WD}/dns-client.csr"
 rm "${WD}/pilot/root-cert.srl"
 rm "${WD}/mountedcerts-server.conf" "${WD}/mountedcerts-server.csr"
 rm "${WD}/mountedcerts-client.conf" "${WD}/mountedcerts-client.csr"
+rm "${WD}/external-forward-proxy/root-cert.srl" "${WD}/external-forward-proxy.conf" "${WD}/external-forward-proxy.csr"
