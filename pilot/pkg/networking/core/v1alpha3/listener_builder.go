@@ -15,6 +15,7 @@
 package v1alpha3
 
 import (
+	"istio.io/istio/pilot/pkg/networking/core/v1alpha3/tunnelingconfig"
 	"time"
 
 	accesslog "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
@@ -51,11 +52,12 @@ import (
 // 1. Use separate inbound capture listener(:15006) and outbound capture listener(:15001)
 // 2. The above listeners use bind_to_port sub listeners or filter chains.
 type ListenerBuilder struct {
-	node              *model.Proxy
-	push              *model.PushContext
-	gatewayListeners  []*listener.Listener
-	inboundListeners  []*listener.Listener
-	outboundListeners []*listener.Listener
+	node                      *model.Proxy
+	push                      *model.PushContext
+	gatewayListeners          []*listener.Listener
+	inboundListeners          []*listener.Listener
+	outboundListeners         []*listener.Listener
+	internalOutboundListeners []*listener.Listener
 	// HttpProxyListener is a specialize outbound listener. See MeshConfig.proxyHttpPort
 	httpProxyListener       *listener.Listener
 	virtualOutboundListener *listener.Listener
@@ -148,6 +150,48 @@ func (lb *ListenerBuilder) buildVirtualOutboundListener() *ListenerBuilder {
 	return lb
 }
 
+func (lb *ListenerBuilder) buildTunnelingOutboundListener() *ListenerBuilder {
+	if lb.node.GetInterceptionMode() == model.InterceptionNone {
+		// virtual listener is not necessary since workload is not using IPtables for traffic interception
+		return lb
+	}
+
+	// TODO(jewertow): Set proper cluster
+	tcpProxy := &tcp.TcpProxy{
+		StatPrefix:       tunnelingconfig.AutoSniListener,
+		ClusterSpecifier: &tcp.TcpProxy_Cluster{Cluster: tunnelingconfig.AutoSniCluster},
+	}
+	internalAutoSniListener := &listener.Listener{
+		Name:              tunnelingconfig.AutoSniListener,
+		ListenerSpecifier: &listener.Listener_InternalListener{InternalListener: &listener.Listener_InternalListenerConfig{}},
+		ListenerFilters: []*listener.ListenerFilter{
+			{
+				Name:       wellknown.TlsInspector,
+				ConfigType: xdsfilters.TLSInspector.ConfigType,
+			},
+		},
+		FilterChains: []*listener.FilterChain{
+			{
+				FilterChainMatch: &listener.FilterChainMatch{
+					TransportProtocol: "tls",
+				},
+				Filters: []*listener.Filter{
+					{
+						Name:       wellknown.TCPProxy,
+						ConfigType: &listener.Filter_TypedConfig{TypedConfig: protoconv.MessageToAny(tcpProxy)},
+					},
+				},
+			},
+		},
+		TrafficDirection: core.TrafficDirection_OUTBOUND,
+	}
+
+	class := model.OutboundListenerClass(lb.node.Type)
+	accessLogBuilder.setListenerAccessLog(lb.push, lb.node, internalAutoSniListener, class)
+	lb.internalOutboundListeners = append(lb.internalOutboundListeners, internalAutoSniListener)
+	return lb
+}
+
 func (lb *ListenerBuilder) patchOneListener(l *listener.Listener, ctx networking.EnvoyFilter_PatchContext) *listener.Listener {
 	if l == nil {
 		return nil
@@ -178,11 +222,12 @@ func (lb *ListenerBuilder) patchListeners() {
 	lb.httpProxyListener = lb.patchOneListener(lb.httpProxyListener, networking.EnvoyFilter_SIDECAR_OUTBOUND)
 	lb.inboundListeners = envoyfilter.ApplyListenerPatches(networking.EnvoyFilter_SIDECAR_INBOUND, lb.envoyFilterWrapper, lb.inboundListeners, false)
 	lb.outboundListeners = envoyfilter.ApplyListenerPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, lb.envoyFilterWrapper, lb.outboundListeners, false)
+	lb.internalOutboundListeners = envoyfilter.ApplyListenerPatches(networking.EnvoyFilter_SIDECAR_OUTBOUND, lb.envoyFilterWrapper, lb.internalOutboundListeners, false)
 }
 
 func (lb *ListenerBuilder) getListeners() []*listener.Listener {
 	if lb.node.Type == model.SidecarProxy {
-		nInbound, nOutbound := len(lb.inboundListeners), len(lb.outboundListeners)
+		nInbound, nOutbound, nInternalOutbound := len(lb.inboundListeners), len(lb.outboundListeners), len(lb.internalOutboundListeners)
 		nHTTPProxy, nVirtual := 0, 0
 		if lb.httpProxyListener != nil {
 			nHTTPProxy = 1
@@ -191,10 +236,11 @@ func (lb *ListenerBuilder) getListeners() []*listener.Listener {
 			nVirtual = 1
 		}
 
-		nListener := nInbound + nOutbound + nHTTPProxy + nVirtual
+		nListener := nInbound + nOutbound + nInternalOutbound + nHTTPProxy + nVirtual
 
 		listeners := make([]*listener.Listener, 0, nListener)
 		listeners = append(listeners, lb.outboundListeners...)
+		listeners = append(listeners, lb.internalOutboundListeners...)
 		if lb.httpProxyListener != nil {
 			listeners = append(listeners, lb.httpProxyListener)
 		}

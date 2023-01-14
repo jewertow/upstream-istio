@@ -16,6 +16,7 @@ package v1alpha3
 
 import (
 	"fmt"
+	"istio.io/istio/pilot/pkg/networking/core/v1alpha3/tunnelingconfig"
 	"math"
 	"net"
 	"strconv"
@@ -94,6 +95,10 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 		services = proxy.SidecarScope.Services()
 	}
 	return configgen.buildClusters(proxy, req, services)
+}
+
+func (configgen *ConfigGeneratorImpl) BuildInternalClusters(_ *model.Proxy, req *model.PushRequest) *discovery.Resource {
+	return configgen.buildInternalClusterForTunnelingProxy(req)
 }
 
 // BuildDeltaClusters generates the deltas (add and delete) for a given proxy. Currently, only service changes are reflected with deltas.
@@ -218,6 +223,38 @@ func (configgen *ConfigGeneratorImpl) buildClusters(proxy *model.Proxy, req *mod
 		return resources, model.DefaultXdsLogDetails
 	}
 	return resources, model.XdsLogDetails{AdditionalInfo: fmt.Sprintf("cached:%v/%v", cacheStats.hits, cacheStats.hits+cacheStats.miss)}
+}
+
+func (configgen *ConfigGeneratorImpl) buildInternalClusterForTunnelingProxy(req *model.PushRequest) *discovery.Resource {
+	c := &cluster.Cluster{
+		Name:           tunnelingconfig.AutoSniCluster,
+		ConnectTimeout: req.Push.Mesh.ConnectTimeout,
+		LoadAssignment: &endpoint.ClusterLoadAssignment{
+			ClusterName: tunnelingconfig.AutoSniCluster,
+			Endpoints: []*endpoint.LocalityLbEndpoints{
+				{
+					LbEndpoints: []*endpoint.LbEndpoint{
+						{
+							HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+								Endpoint: &endpoint.Endpoint{
+									Address: &core.Address{
+										Address: &core.Address_EnvoyInternalAddress{
+											EnvoyInternalAddress: &core.EnvoyInternalAddress{
+												AddressNameSpecifier: &core.EnvoyInternalAddress_ServerListenerName{
+													ServerListenerName: tunnelingconfig.AutoSniListener,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return &discovery.Resource{Name: c.Name, Resource: protoconv.MessageToAny(c)}
 }
 
 func shouldUseDelta(updates *model.PushRequest) bool {

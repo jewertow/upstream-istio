@@ -41,8 +41,9 @@ var skippedCdsConfigs = map[kind.Kind]struct{}{
 
 // Map all configs that impact CDS for gateways when `PILOT_FILTER_GATEWAY_CLUSTER_CONFIG = true`.
 var pushCdsGatewayConfig = map[kind.Kind]struct{}{
-	kind.VirtualService: {},
-	kind.Gateway:        {},
+	kind.VirtualService:  {},
+	kind.Gateway:         {},
+	kind.DestinationRule: {},
 }
 
 func cdsNeedsPush(req *model.PushRequest, proxy *model.Proxy) bool {
@@ -61,6 +62,7 @@ func cdsNeedsPush(req *model.PushRequest, proxy *model.Proxy) bool {
 		if features.FilterGatewayClusterConfig {
 			if proxy.Type == model.Router {
 				if _, f := pushCdsGatewayConfig[config.Kind]; f {
+					// TODO(jewertow): check if config.tunnel_config exists. If not, don't return true
 					return true
 				}
 			}
@@ -78,6 +80,8 @@ func (c CdsGenerator) Generate(proxy *model.Proxy, w *model.WatchedResource, req
 		return nil, model.DefaultXdsLogDetails, nil
 	}
 	clusters, logs := c.Server.ConfigGenerator.BuildClusters(proxy, req)
+	internalClusters := c.Server.ConfigGenerator.BuildInternalClusters(proxy, req)
+	clusters = append(clusters, internalClusters)
 	return clusters, logs, nil
 }
 

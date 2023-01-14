@@ -204,7 +204,8 @@ func (configgen *ConfigGeneratorImpl) buildSidecarListeners(builder *ListenerBui
 		builder.appendSidecarInboundListeners().
 			appendSidecarOutboundListeners().
 			buildHTTPProxyListener().
-			buildVirtualOutboundListener()
+			buildVirtualOutboundListener().
+			buildTunnelingOutboundListener()
 	}
 	return builder
 }
