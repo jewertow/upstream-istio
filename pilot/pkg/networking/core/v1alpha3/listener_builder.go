@@ -150,45 +150,20 @@ func (lb *ListenerBuilder) buildVirtualOutboundListener() *ListenerBuilder {
 	return lb
 }
 
-func (lb *ListenerBuilder) buildTunnelingOutboundListener() *ListenerBuilder {
+func (lb *ListenerBuilder) buildInternalTunnelingOutboundListeners() *ListenerBuilder {
 	if lb.node.GetInterceptionMode() == model.InterceptionNone {
 		// virtual listener is not necessary since workload is not using IPtables for traffic interception
 		return lb
 	}
 
-	// TODO(jewertow): Set proper cluster
-	tcpProxy := &tcp.TcpProxy{
-		StatPrefix:       tunnelingconfig.AutoSniListener,
-		ClusterSpecifier: &tcp.TcpProxy_Cluster{Cluster: tunnelingconfig.AutoSniCluster},
+	for tunnelProxy, tunnelSettingsList := range lb.node.SidecarScope.TunnelingDestinationRules() {
+		for _, tunnelSettings := range tunnelSettingsList {
+			internalTunnelingListener := tunnelingconfig.BuildInternalListener(tunnelProxy, tunnelSettings)
+			class := model.OutboundListenerClass(lb.node.Type)
+			accessLogBuilder.setListenerAccessLog(lb.push, lb.node, internalTunnelingListener, class)
+			lb.internalOutboundListeners = append(lb.internalOutboundListeners, internalTunnelingListener)
+		}
 	}
-	internalAutoSniListener := &listener.Listener{
-		Name:              tunnelingconfig.AutoSniListener,
-		ListenerSpecifier: &listener.Listener_InternalListener{InternalListener: &listener.Listener_InternalListenerConfig{}},
-		ListenerFilters: []*listener.ListenerFilter{
-			{
-				Name:       wellknown.TlsInspector,
-				ConfigType: xdsfilters.TLSInspector.ConfigType,
-			},
-		},
-		FilterChains: []*listener.FilterChain{
-			{
-				FilterChainMatch: &listener.FilterChainMatch{
-					TransportProtocol: "tls",
-				},
-				Filters: []*listener.Filter{
-					{
-						Name:       wellknown.TCPProxy,
-						ConfigType: &listener.Filter_TypedConfig{TypedConfig: protoconv.MessageToAny(tcpProxy)},
-					},
-				},
-			},
-		},
-		TrafficDirection: core.TrafficDirection_OUTBOUND,
-	}
-
-	class := model.OutboundListenerClass(lb.node.Type)
-	accessLogBuilder.setListenerAccessLog(lb.push, lb.node, internalAutoSniListener, class)
-	lb.internalOutboundListeners = append(lb.internalOutboundListeners, internalAutoSniListener)
 	return lb
 }
 

@@ -160,6 +160,7 @@ func TestTunnelingOutboundTraffic(t *testing.T) {
 					// Make sure that configuration changes were pushed to istio-proxies.
 					// Otherwise, test results could be false-positive,
 					// because subsequent test cases could work thanks to previous configurations.
+					// TODO: Fix this check to avoid false failure
 					waitUntilTunnelingConfigurationIsRemovedOrFail(ctx, meshNs)
 				}
 

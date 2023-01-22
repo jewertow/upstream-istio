@@ -595,6 +595,26 @@ func (sc *SidecarScope) DestinationRule(direction TrafficDirection, proxy *Proxy
 	return nil
 }
 
+func (sc *SidecarScope) TunnelingDestinationRules() map[string][]*networking.TrafficPolicy_TunnelSettings {
+	tunnelSettings := map[string][]*networking.TrafficPolicy_TunnelSettings{}
+	for _, destRules := range sc.destinationRules {
+		for _, destRuleConfig := range destRules {
+			destRule := destRuleConfig.rule.Spec.(*networking.DestinationRule)
+			if destRule.GetTrafficPolicy().GetTunnel() != nil {
+				tunnelSettingsList := tunnelSettings[destRule.Host]
+				tunnelSettings[destRule.Host] = append(tunnelSettingsList, destRule.TrafficPolicy.Tunnel)
+			}
+			for _, subset := range destRule.GetSubsets() {
+				if subset.GetTrafficPolicy().GetTunnel() != nil {
+					tunnelSettingsList := tunnelSettings[destRule.Host]
+					tunnelSettings[destRule.Host] = append(tunnelSettingsList, subset.TrafficPolicy.Tunnel)
+				}
+			}
+		}
+	}
+	return tunnelSettings
+}
+
 // Services returns the list of services that are visible to a sidecar.
 func (sc *SidecarScope) Services() []*Service {
 	return sc.services
