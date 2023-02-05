@@ -80,8 +80,6 @@ func (c CdsGenerator) Generate(proxy *model.Proxy, w *model.WatchedResource, req
 		return nil, model.DefaultXdsLogDetails, nil
 	}
 	clusters, logs := c.Server.ConfigGenerator.BuildClusters(proxy, req)
-	internalClusters := c.Server.ConfigGenerator.BuildInternalClusters(proxy, req)
-	clusters = append(clusters, internalClusters)
 	return clusters, logs, nil
 }
 

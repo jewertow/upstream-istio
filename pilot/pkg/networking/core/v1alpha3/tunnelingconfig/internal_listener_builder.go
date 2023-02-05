@@ -2,7 +2,9 @@ package tunnelingconfig
 
 import (
 	"fmt"
+	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
@@ -19,12 +21,19 @@ type InternalTunnelingListenerSpec struct {
 	Protocol            string
 }
 
-func getListenerName(tunnelSettings *networking.TrafficPolicy_TunnelSettings) string {
+func internalListenerName(tunnelSettings *networking.TrafficPolicy_TunnelSettings) string {
 	return fmt.Sprintf("tunneling-proxy-%s-%d", tunnelSettings.TargetHost, tunnelSettings.TargetPort)
 }
 
-func getClusterName(tunnelProxyHostname string) string {
-	return fmt.Sprintf("outbound|TODO||%s", tunnelProxyHostname)
+func internalClusterName(tunnelSettings *networking.TrafficPolicy_TunnelSettings) string {
+	if isAutoSNI(tunnelSettings) {
+		// TODO
+	}
+	return fmt.Sprintf("outbound|internal|%s|%s", tunnelSettings.TargetHost, internalListenerName(tunnelSettings))
+}
+
+func tunnelProxyClusterName(hostname, subset string, port uint32) string {
+	return fmt.Sprintf("outbound|%d|%s|%s", port, subset, hostname)
 }
 
 func isAutoSNI(tunnelSettings *networking.TrafficPolicy_TunnelSettings) bool {
@@ -36,8 +45,9 @@ func BuildInternalListener(tunnelProxyHostname string, tunnelSettings *networkin
 		// TODO:
 	}
 	tcpProxy := &tcp.TcpProxy{
-		StatPrefix:       getListenerName(tunnelSettings),
-		ClusterSpecifier: &tcp.TcpProxy_Cluster{Cluster: getClusterName(tunnelProxyHostname)},
+		StatPrefix: internalListenerName(tunnelSettings),
+		// TODO(jewertow): handle port and subset
+		ClusterSpecifier: &tcp.TcpProxy_Cluster{Cluster: tunnelProxyClusterName(tunnelProxyHostname, "", 3128)},
 		TunnelingConfig: &tcp.TcpProxy_TunnelingConfig{
 			Hostname: net.JoinHostPort(tunnelSettings.TargetHost, strconv.Itoa(int(tunnelSettings.TargetPort))),
 			UsePost:  tunnelSettings.Protocol == "POST",
@@ -45,7 +55,7 @@ func BuildInternalListener(tunnelProxyHostname string, tunnelSettings *networkin
 	}
 
 	return &listener.Listener{
-		Name: getListenerName(tunnelSettings),
+		Name: internalListenerName(tunnelSettings),
 		ListenerSpecifier: &listener.Listener_InternalListener{
 			InternalListener: &listener.Listener_InternalListenerConfig{},
 		},
@@ -71,4 +81,30 @@ func BuildInternalListener(tunnelProxyHostname string, tunnelSettings *networkin
 	//		ConfigType: xdsfilters.TLSInspector.ConfigType,
 	//	})
 	//}
+}
+
+func ChangeToInternalTunnelingCluster(c *cluster.Cluster, tunnelSettings *networking.TrafficPolicy_TunnelSettings) {
+	c.Name = internalClusterName(tunnelSettings)
+	c.LoadAssignment.ClusterName = internalClusterName(tunnelSettings)
+	c.LoadAssignment.Endpoints = []*endpoint.LocalityLbEndpoints{
+		{
+			LbEndpoints: []*endpoint.LbEndpoint{
+				{
+					HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+						Endpoint: &endpoint.Endpoint{
+							Address: &core.Address{
+								Address: &core.Address_EnvoyInternalAddress{
+									EnvoyInternalAddress: &core.EnvoyInternalAddress{
+										AddressNameSpecifier: &core.EnvoyInternalAddress_ServerListenerName{
+											ServerListenerName: internalListenerName(tunnelSettings),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }

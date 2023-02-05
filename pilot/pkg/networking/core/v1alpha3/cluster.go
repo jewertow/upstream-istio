@@ -97,10 +97,6 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(proxy *model.Proxy, req *mod
 	return configgen.buildClusters(proxy, req, services)
 }
 
-func (configgen *ConfigGeneratorImpl) BuildInternalClusters(_ *model.Proxy, req *model.PushRequest) *discovery.Resource {
-	return configgen.buildInternalClusterForTunnelingProxy(req)
-}
-
 // BuildDeltaClusters generates the deltas (add and delete) for a given proxy. Currently, only service changes are reflected with deltas.
 // Otherwise, we fall back onto generating everything.
 func (configgen *ConfigGeneratorImpl) BuildDeltaClusters(proxy *model.Proxy, updates *model.PushRequest,
@@ -225,38 +221,6 @@ func (configgen *ConfigGeneratorImpl) buildClusters(proxy *model.Proxy, req *mod
 	return resources, model.XdsLogDetails{AdditionalInfo: fmt.Sprintf("cached:%v/%v", cacheStats.hits, cacheStats.hits+cacheStats.miss)}
 }
 
-func (configgen *ConfigGeneratorImpl) buildInternalClusterForTunnelingProxy(req *model.PushRequest) *discovery.Resource {
-	c := &cluster.Cluster{
-		Name:           tunnelingconfig.AutoSniCluster,
-		ConnectTimeout: req.Push.Mesh.ConnectTimeout,
-		LoadAssignment: &endpoint.ClusterLoadAssignment{
-			ClusterName: tunnelingconfig.AutoSniCluster,
-			Endpoints: []*endpoint.LocalityLbEndpoints{
-				{
-					LbEndpoints: []*endpoint.LbEndpoint{
-						{
-							HostIdentifier: &endpoint.LbEndpoint_Endpoint{
-								Endpoint: &endpoint.Endpoint{
-									Address: &core.Address{
-										Address: &core.Address_EnvoyInternalAddress{
-											EnvoyInternalAddress: &core.EnvoyInternalAddress{
-												AddressNameSpecifier: &core.EnvoyInternalAddress_ServerListenerName{
-													ServerListenerName: tunnelingconfig.AutoSniListener,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	return &discovery.Resource{Name: c.Name, Resource: protoconv.MessageToAny(c)}
-}
-
 func shouldUseDelta(updates *model.PushRequest) bool {
 	return updates != nil && deltaAwareConfigTypes(updates.ConfigsUpdated) && len(updates.ConfigsUpdated) > 0
 }
@@ -271,6 +235,7 @@ func deltaAwareConfigTypes(cfgs sets.Set[model.ConfigKey]) bool {
 	return true
 }
 
+// TODO(jewertow)
 // buildOutboundClusters generates all outbound (including subsets) clusters for a given proxy.
 func (configgen *ConfigGeneratorImpl) buildOutboundClusters(cb *ClusterBuilder, proxy *model.Proxy, cp clusterPatcher,
 	services []*model.Service,
@@ -309,6 +274,11 @@ func (configgen *ConfigGeneratorImpl) buildOutboundClusters(cb *ClusterBuilder, 
 
 			subsetClusters := cb.applyDestinationRule(defaultCluster, DefaultClusterMode, service, port,
 				clusterKey.proxyView, clusterKey.destinationRule.GetRule(), clusterKey.serviceAccounts)
+
+			tunnel := CastDestinationRule(clusterKey.destinationRule.GetRule()).GetTrafficPolicy().GetTunnel()
+			if tunnel != nil {
+				tunnelingconfig.ChangeToInternalTunnelingCluster(defaultCluster.cluster, tunnel)
+			}
 
 			if patched := cp.patch(nil, defaultCluster.build()); patched != nil {
 				resources = append(resources, patched)

@@ -99,6 +99,7 @@ func buildOutboundNetworkFiltersWithSingleDestination(push *model.PushContext, n
 		tcpProxy.MaxDownstreamConnectionDuration = maxConnectionDuration
 	}
 	maybeSetHashPolicy(destinationRule, tcpProxy, subsetName)
+	// TODO(jewertow): set proper internal cluster name
 	applyTunnelingConfig(tcpProxy, destinationRule, subsetName)
 	class := model.OutboundListenerClass(node.Type)
 	tcpFilter := setAccessLogAndBuildTCPFilter(push, node, tcpProxy, class)
