@@ -392,6 +392,10 @@ func getClusterSpecificValues(client kube.Client, force bool, l clog.Logger) (st
 	if cni != "" {
 		overlays = append(overlays, cni)
 	}
+	ztunnel := getZTunnelSettings(client)
+	if ztunnel != "" {
+		overlays = append(overlays, ztunnel)
+	}
 	return makeTreeFromSetList(overlays)
 }
 
@@ -399,17 +403,40 @@ func getClusterSpecificValues(client kube.Client, force bool, l clog.Logger) (st
 // Note: there are other settings as well; however, these are detected inline in the helm chart.
 // This ensures helm users also get them.
 func getCNISettings(client kube.Client) string {
-	ver, err := client.GetKubernetesVersion()
-	if err != nil {
-		return ""
-	}
 	// https://istio.io/latest/docs/setup/additional-setup/cni/#hosted-kubernetes-settings
-	// GKE requires deployment in kube-system namespace.
-	if strings.Contains(ver.GitVersion, "-gke") {
+	// GKE and OpenShift require deployment in kube-system namespace.
+	if isGKE(client) || isOpenShift(client) {
 		return "components.cni.namespace=kube-system"
 	}
-	// TODO: OpenShift
 	return ""
+}
+
+func getZTunnelSettings(client kube.Client) string {
+	if isOpenShift(client) {
+		return "components.ztunnel.namespace=kube-system"
+	}
+	return ""
+}
+
+func isGKE(client kube.Client) bool {
+	ver, err := client.GetKubernetesVersion()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(ver.GitVersion, "-gke")
+}
+
+func isOpenShift(client kube.Client) bool {
+	apiGroups, err := client.Kube().Discovery().ServerGroups()
+	if err != nil {
+		return false
+	}
+	for _, g := range apiGroups.Groups {
+		if strings.HasSuffix(g.Name, "openshift.io") {
+			return true
+		}
+	}
+	return false
 }
 
 // makeTreeFromSetList creates a YAML tree from a string slice containing key-value pairs in the format key=value.
