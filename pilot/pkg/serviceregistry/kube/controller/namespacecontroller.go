@@ -15,6 +15,8 @@
 package controller
 
 import (
+	"istio.io/istio/pkg/config/constants"
+	"istio.io/istio/pkg/util/sets"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -22,6 +24,7 @@ import (
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	listerv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"strings"
 
 	"istio.io/istio/pilot/pkg/keycertbundle"
 	"istio.io/istio/pkg/kube"
@@ -52,6 +55,8 @@ type NamespaceController struct {
 	// if meshConfig.DiscoverySelectors specified, DiscoveryNamespacesFilter tracks the namespaces to be watched by this controller.
 	DiscoveryNamespacesFilter filter.DiscoveryNamespacesFilter
 	handlers                  *controllers.InformerHandler
+
+	ignoredNamespaces sets.Set[string]
 }
 
 // NewNamespaceController returns a pointer to a newly constructed NamespaceController instance.
@@ -72,12 +77,16 @@ func NewNamespaceController(kubeClient kube.Client, caBundleWatcher *keycertbund
 	c.namespacesInformer = kubeClient.KubeInformer().Core().V1().Namespaces().Informer()
 	c.namespaceLister = kubeClient.KubeInformer().Core().V1().Namespaces().Lister()
 
+	c.ignoredNamespaces = inject.IgnoredNamespaces.Copy()
+	if isOpenShift(kubeClient) {
+		c.ignoredNamespaces.Delete(constants.KubeSystemNamespace)
+	}
 	c.handlers.RegisterEventHandler(c.configMapInformer, controllers.FilteredObjectSpecHandler(c.queue.AddObject, func(o controllers.Object) bool {
 		if o.GetName() != CACertNamespaceConfigMap {
 			// This is a change to a configmap we don't watch, ignore it
 			return false
 		}
-		if inject.IgnoredNamespaces.Contains(o.GetNamespace()) {
+		if c.ignoredNamespaces.Contains(o.GetNamespace()) {
 			// skip special kubernetes system namespaces
 			return false
 		}
@@ -88,7 +97,7 @@ func NewNamespaceController(kubeClient kube.Client, caBundleWatcher *keycertbund
 		return true
 	}))
 	c.handlers.RegisterEventHandler(c.namespacesInformer, controllers.FilteredObjectSpecHandler(c.queue.AddObject, func(o controllers.Object) bool {
-		if inject.IgnoredNamespaces.Contains(o.GetName()) {
+		if c.ignoredNamespaces.Contains(o.GetName()) {
 			// skip special kubernetes system namespaces
 			return false
 		}
@@ -157,7 +166,7 @@ func (nc *NamespaceController) namespaceChange(ns *v1.Namespace) {
 
 func (nc *NamespaceController) syncNamespace(ns *v1.Namespace) {
 	// skip special kubernetes system namespaces
-	if inject.IgnoredNamespaces.Contains(ns.Name) {
+	if nc.ignoredNamespaces.Contains(ns.Name) {
 		return
 	}
 	// skip namespaces we don't watch
@@ -165,4 +174,17 @@ func (nc *NamespaceController) syncNamespace(ns *v1.Namespace) {
 		return
 	}
 	nc.queue.Add(types.NamespacedName{Name: ns.Name})
+}
+
+func isOpenShift(client kube.Client) bool {
+	apiGroups, err := client.Kube().Discovery().ServerGroups()
+	if err != nil {
+		return false
+	}
+	for _, g := range apiGroups.Groups {
+		if strings.HasSuffix(g.Name, "openshift.io") {
+			return true
+		}
+	}
+	return false
 }
