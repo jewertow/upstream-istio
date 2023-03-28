@@ -16,9 +16,10 @@ spec:
       {{- include "gateway.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
+        istio.io/rev: {{ .Values.revision | default "default" }}
+      {{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
       {{- end }}
       labels:
         sidecar.istio.io/inject: "true"
