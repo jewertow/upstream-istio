@@ -13,6 +13,7 @@ spec:
       annotations:
         foo: bar
         inject.istio.io/templates: custom
+        istio.io/rev: default
         prometheus.istio.io/merge-metrics: "false"
         proxy.istio.io/overrides: '{"containers":[{"name":"hello","image":"fake.docker.io/google-samples/hello-go-gke:1.0","resources":{},"readinessProbe":{"httpGet":{"port":80}}}]}'
         sidecar.istio.io/rewriteAppHTTPProbers: "false"
