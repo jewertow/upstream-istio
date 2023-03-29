@@ -574,7 +574,6 @@ kind: Pod
 metadata:
   annotations:
     inject.istio.io/templates: %s
-    istio.io/rev: default
     prometheus.io/path: /stats/prometheus
     prometheus.io/port: "0"
     prometheus.io/scrape: "true"
@@ -628,7 +627,6 @@ apiVersion: v1
 kind: Pod
 metadata:
   annotations:
-    istio.io/rev: default
     prometheus.io/path: /stats/prometheus
     prometheus.io/port: "0"
     prometheus.io/scrape: "true"

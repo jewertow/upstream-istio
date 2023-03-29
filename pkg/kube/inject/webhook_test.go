@@ -940,7 +940,6 @@ func TestRunAndServe(t *testing.T) {
     "op": "add",
     "path": "/metadata/annotations",
     "value": {
-        "istio.io/rev": "default",
         "prometheus.io/path": "/stats/prometheus",
         "prometheus.io/port": "15020",
         "prometheus.io/scrape": "true",

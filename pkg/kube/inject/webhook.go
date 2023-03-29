@@ -631,11 +631,6 @@ func applyMetadata(pod *corev1.Pod, injectedPodData corev1.Pod, req InjectionPar
 	if nw, ok := req.proxyEnvs["ISTIO_META_NETWORK"]; ok {
 		pod.Labels[label.TopologyNetwork.Name] = nw
 	}
-	if req.revision != "" {
-		pod.Annotations["istio.io/rev"] = req.revision
-	} else {
-		pod.Annotations["istio.io/rev"] = "default"
-	}
 	// Add all additional injected annotations. These are overridden if needed
 	pod.Annotations[annotation.SidecarStatus.Name] = getInjectionStatus(injectedPodData.Spec, req.revision)
 

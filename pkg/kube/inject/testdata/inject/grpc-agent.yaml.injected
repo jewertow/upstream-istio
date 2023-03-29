@@ -12,7 +12,6 @@ spec:
     metadata:
       annotations:
         inject.istio.io/templates: grpc-agent
-        istio.io/rev: default
         kubectl.kubernetes.io/default-container: traffic
         kubectl.kubernetes.io/default-logs-container: traffic
         prometheus.io/path: /stats/prometheus
