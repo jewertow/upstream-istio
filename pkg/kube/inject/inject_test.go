@@ -1065,6 +1065,22 @@ func TestProxyImage(t *testing.T) {
 			ann:  ann("distroless"),
 			want: "private-repo/istio/proxyv2:1.12-this-is-unusual-tag-distroless",
 		},
+		{
+			desc: "sha256",
+			v:    val("docker.io/istio", "sha256:ea2fd352a45eaa7740d148c60b4b18d83e66302daaf35105254026f15e6e88a9"),
+			want: "docker.io/istio/proxyv2@sha256:ea2fd352a45eaa7740d148c60b4b18d83e66302daaf35105254026f15e6e88a9",
+		},
+		{
+			desc: "sha256 and image type",
+			v:    val("docker.io/istio", "1.20.0-rc.0@sha256:ea2fd352a45eaa7740d148c60b4b18d83e66302daaf35105254026f15e6e88a9"),
+			want: "docker.io/istio/proxyv2:1.20.0-rc.0@sha256:ea2fd352a45eaa7740d148c60b4b18d83e66302daaf35105254026f15e6e88a9",
+		},
+		{
+			desc: "tag, sha256 and image type",
+			v:    val("docker.io/istio", "1.20.0-rc.0@sha256:ea2fd352a45eaa7740d148c60b4b18d83e66302daaf35105254026f15e6e88a9"),
+			pc:   pc("distroless"),
+			want: "docker.io/istio/proxyv2:1.20.0-rc.0-distroless@sha256:ea2fd352a45eaa7740d148c60b4b18d83e66302daaf35105254026f15e6e88a9",
+		},
 	} {
 		t.Run(tt.desc, func(t *testing.T) {
 			got := ProxyImage(tt.v, tt.pc, tt.ann)

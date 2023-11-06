@@ -333,6 +333,9 @@ func ProxyImage(values *opconfig.Values, image *proxyConfig.ProxyImage, annotati
 // gcr.io/gke-release/asm/proxyv2:1.11.2-asm.17-distroless
 // docker.io/istio/proxyv2:1.12
 func imageURL(hub, imageName, tag, imageType string) string {
+	if strings.HasPrefix(tag, "sha256") {
+		return hub + "/" + imageName + "@" + tag
+	}
 	return hub + "/" + imageName + ":" + updateImageTypeIfPresent(tag, imageType)
 }
 
@@ -355,6 +358,10 @@ func updateImageTypeIfPresent(tag string, imageType string) string {
 		return tag
 	}
 
+	if strings.Contains(tag, "@sha256") {
+		tagAndSHA := strings.Split(tag, "@")
+		return tagAndSHA[0] + "-" + imageType + "@" + tagAndSHA[1]
+	}
 	return tag + "-" + imageType
 }
 
