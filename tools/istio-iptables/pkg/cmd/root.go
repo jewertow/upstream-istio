@@ -196,7 +196,7 @@ func ProgramIptables(cfg *config.Config) error {
 		}
 	}
 
-	iptConfigurator := capture.NewIptablesConfigurator(cfg, ext)
+	iptConfigurator := capture.NewIptablesConfigurator(cfg, ext, false)
 
 	if !cfg.SkipRuleApply {
 		if err := iptConfigurator.Run(); err != nil {

@@ -15,6 +15,7 @@
 package capture
 
 import (
+	"fmt"
 	"net/netip"
 	"path/filepath"
 	"reflect"
@@ -268,13 +269,45 @@ func TestIptables(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := constructTestConfig()
 			tt.config(cfg)
-			iptConfigurator := NewIptablesConfigurator(cfg, &dep.StdoutStubDependencies{})
-			iptConfigurator.Run()
+			iptConfigurator := NewIptablesConfigurator(cfg, &dep.StdoutStubDependencies{}, false)
+			if err := iptConfigurator.Run(); err != nil {
+				t.Errorf("failed to run iptables configurator: %s", err)
+			}
 			v4Rules := iptConfigurator.iptables.BuildV4()
 			v6Rules := iptConfigurator.iptables.BuildV6()
 			allRules := append(v4Rules, v6Rules...)
 			actual := FormatIptablesCommands(allRules)
-			compareToGolden(t, tt.name, actual)
+			compareToGolden(t, tt.name, actual, "iptables")
+		})
+	}
+}
+
+func TestNftables(t *testing.T) {
+	cases := []struct {
+		name   string
+		config func(cfg *config.Config)
+	}{
+		{
+			"inbound-ports-include",
+			func(cfg *config.Config) {
+				cfg.InboundPortsInclude = "32000,31000"
+			},
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := constructTestConfig()
+			tt.config(cfg)
+			iptConfigurator := NewIptablesConfigurator(cfg, &dep.StdoutStubDependencies{}, true)
+			if err := iptConfigurator.Run(); err != nil {
+				t.Errorf("failed to run iptables configurator: %s", err)
+			}
+			v4Rules := iptConfigurator.nftables.BuildV4()
+			fmt.Println(v4Rules)
+			//TODO(jewertow): test v6 once it's implemented
+			//v6Rules := iptConfigurator.iptables.BuildV6()
+			actual := FormatIptablesCommands(v4Rules)
+			compareToGolden(t, tt.name, actual, "nftables")
 		})
 	}
 }
@@ -317,7 +350,7 @@ func TestSeparateV4V6(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := constructTestConfig()
-			iptConfigurator := NewIptablesConfigurator(cfg, &dep.StdoutStubDependencies{})
+			iptConfigurator := NewIptablesConfigurator(cfg, &dep.StdoutStubDependencies{}, false)
 			v4Range, v6Range, err := iptConfigurator.separateV4V6(tt.cidr)
 			if err != nil {
 				t.Fatal(err)
@@ -332,9 +365,9 @@ func TestSeparateV4V6(t *testing.T) {
 	}
 }
 
-func compareToGolden(t *testing.T, name string, actual []string) {
+func compareToGolden(t *testing.T, name string, actual []string, directory string) {
 	t.Helper()
 	gotBytes := []byte(strings.Join(actual, "\n"))
-	goldenFile := filepath.Join("testdata", name+".golden")
+	goldenFile := filepath.Join("testdata", directory, name+".golden")
 	testutil.CompareContent(t, gotBytes, goldenFile)
 }
