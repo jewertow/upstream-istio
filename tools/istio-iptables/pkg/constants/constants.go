@@ -151,6 +151,7 @@ const (
 	IP6TABLES        = "ip6tables"
 	IP6TABLESRESTORE = "ip6tables-restore"
 	IP6TABLESSAVE    = "ip6tables-save"
+	NFTABLES         = "nft"
 )
 
 // Constants for syscall
