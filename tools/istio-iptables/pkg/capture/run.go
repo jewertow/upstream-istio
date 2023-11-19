@@ -31,6 +31,8 @@ import (
 )
 
 type Ops int
+type IptablesParams = []string
+type NftablesParams = []string
 
 const (
 	// AppendOps performs append operations of rules
@@ -157,8 +159,8 @@ func (cfg *IptablesConfigurator) handleInboundPortsInclude() {
 			table = constants.NAT
 		}
 		cfg.appendRule(iptableslog.JumpInbound, constants.PREROUTING, table,
-			[]string{"-p", constants.TCP, "-j", constants.ISTIOINBOUND},
-			[]string{"ip", "protocol", constants.TCP, "counter", "jump", constants.ISTIOINBOUND})
+			IptablesParams{"-p", constants.TCP, "-j", constants.ISTIOINBOUND},
+			NftablesParams{"ip", "protocol", constants.TCP, "counter", "jump", constants.ISTIOINBOUND})
 
 		if cfg.cfg.InboundPortsInclude == "*" {
 			// Apply any user-specified port exclusions.
@@ -191,8 +193,8 @@ func (cfg *IptablesConfigurator) handleInboundPortsInclude() {
 						constants.ISTIOINBOUND, constants.MANGLE, "-p", constants.TCP, "--dport", port, "-j", constants.ISTIOTPROXY)
 				} else {
 					cfg.appendRule(iptableslog.IncludeInboundPort, constants.ISTIOINBOUND, constants.NAT,
-						[]string{"-p", constants.TCP, "--dport", port, "-j", constants.ISTIOINREDIRECT},
-						[]string{constants.TCP, "dport", port, "counter", "jump", constants.ISTIOINREDIRECT})
+						IptablesParams{"-p", constants.TCP, "--dport", port, "-j", constants.ISTIOINREDIRECT},
+						NftablesParams{constants.TCP, "dport", port, "counter", "jump", constants.ISTIOINREDIRECT})
 				}
 			}
 		}
@@ -349,8 +351,8 @@ func (cfg *IptablesConfigurator) Run() error {
 	// iptablesOrFail wrapper (like ufw). Current default is similar with 0.1
 	// Jump to the ISTIOOUTPUT chain from OUTPUT chain for all tcp traffic, and UDP dns (if enabled)
 	cfg.appendRule(iptableslog.JumpOutbound, constants.OUTPUT, constants.NAT,
-		[]string{"-p", constants.TCP, "-j", constants.ISTIOOUTPUT},
-		[]string{"ip", "protocol", constants.TCP, "counter", "jump", constants.ISTIOOUTPUT})
+		IptablesParams{"-p", constants.TCP, "-j", constants.ISTIOOUTPUT},
+		NftablesParams{"ip", "protocol", constants.TCP, "counter", "jump", constants.ISTIOOUTPUT})
 	// Apply port based exclusions. Must be applied before connections back to self are redirected.
 	if cfg.cfg.OutboundPortsExclude != "" {
 		for _, port := range split(cfg.cfg.OutboundPortsExclude) {
@@ -790,7 +792,7 @@ func (cfg *IptablesConfigurator) executeCommands() error {
 	return nil
 }
 
-func (cfg *IptablesConfigurator) appendRule(command iptableslog.Command, chain string, table string, iptablesParams []string, nftablesParams []string) {
+func (cfg *IptablesConfigurator) appendRule(command iptableslog.Command, chain string, table string, iptablesParams IptablesParams, nftablesParams NftablesParams) {
 	if cfg.nftables != nil {
 		cfg.nftables.AppendRuleV4(command, chain, table, nftablesParams...)
 	}
