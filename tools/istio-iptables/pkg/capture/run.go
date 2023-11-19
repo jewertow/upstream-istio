@@ -336,8 +336,9 @@ func (cfg *IptablesConfigurator) Run() error {
 	// Create a new chain for redirecting outbound traffic to the common Envoy port.
 	// In both chains, '-j RETURN' bypasses Envoy and '-j ISTIOREDIRECT'
 	// redirects to Envoy.
-	cfg.iptables.AppendRule(iptableslog.UndefinedCommand,
-		constants.ISTIOREDIRECT, constants.NAT, "-p", constants.TCP, "-j", constants.REDIRECT, "--to-ports", cfg.cfg.ProxyPort)
+	cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOREDIRECT, constants.NAT,
+		IptablesParams{"-p", constants.TCP, "-j", constants.REDIRECT, "--to-ports", cfg.cfg.ProxyPort},
+		NftablesParams{"ip", "protocol", "tcp", "counter", "redirect", "to", ":" + cfg.cfg.ProxyPort})
 
 	// Use this chain also for redirecting inbound traffic to the common Envoy port
 	// when not using TPROXY.
