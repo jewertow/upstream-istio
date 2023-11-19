@@ -1,5 +1,6 @@
-nft add chain ip nat ISTIO_REDIRECT
 nft add chain ip nat ISTIO_INBOUND
+nft add chain ip nat ISTIO_REDIRECT
+nft add rule ip nat ISTIO_INBOUND tcp dport 15008 counter return
 nft add rule ip nat ISTIO_REDIRECT ip protocol tcp counter redirect to :15001
 nft add rule ip nat PREROUTING ip protocol tcp counter jump ISTIO_INBOUND
 nft add rule ip nat ISTIO_INBOUND tcp dport 32000 counter jump ISTIO_IN_REDIRECT

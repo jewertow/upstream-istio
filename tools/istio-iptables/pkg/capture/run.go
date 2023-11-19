@@ -330,15 +330,16 @@ func (cfg *IptablesConfigurator) Run() error {
 	}
 
 	// Create a new chain for to hit tunnel port directly. Envoy will be listening on port acting as VPN tunnel.
-	cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.NAT, "-p", constants.TCP, "--dport",
-		cfg.cfg.InboundTunnelPort, "-j", constants.RETURN)
+	cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.NAT,
+		IptablesParams{"-p", constants.TCP, "--dport", cfg.cfg.InboundTunnelPort, "-j", constants.RETURN},
+		NftablesParams{constants.TCP, "dport", cfg.cfg.InboundTunnelPort, "counter", "return"})
 
 	// Create a new chain for redirecting outbound traffic to the common Envoy port.
 	// In both chains, '-j RETURN' bypasses Envoy and '-j ISTIOREDIRECT'
 	// redirects to Envoy.
 	cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOREDIRECT, constants.NAT,
 		IptablesParams{"-p", constants.TCP, "-j", constants.REDIRECT, "--to-ports", cfg.cfg.ProxyPort},
-		NftablesParams{"ip", "protocol", "tcp", "counter", "redirect", "to", ":" + cfg.cfg.ProxyPort})
+		NftablesParams{"ip", "protocol", constants.TCP, "counter", "redirect", "to", ":" + cfg.cfg.ProxyPort})
 
 	// Use this chain also for redirecting inbound traffic to the common Envoy port
 	// when not using TPROXY.
