@@ -385,12 +385,19 @@ func (cfg *IptablesConfigurator) Run() error {
 				"!", "--dports", "53,"+cfg.cfg.InboundTunnelPort,
 				"-m", "owner", "--uid-owner", uid, "-j", constants.ISTIOINREDIRECT)
 		} else {
-			cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-				"-o", "lo",
-				"!", "-d", constants.IPVersionSpecific,
-				"-p", "tcp",
-				"!", "--dport", cfg.cfg.InboundTunnelPort,
-				"-m", "owner", "--uid-owner", uid, "-j", constants.ISTIOINREDIRECT)
+			cfg.appendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+				IptablesParams{
+					"-o", "lo",
+					"!", "-d", constants.IPVersionSpecific,
+					"-p", "tcp",
+					"!", "--dport", cfg.cfg.InboundTunnelPort,
+					"-m", "owner", "--uid-owner", uid, "-j", constants.ISTIOINREDIRECT},
+				NftablesParams{
+					"oifname", "lo",
+					"ip", "daddr", "!=", constants.IPVersionSpecific,
+					constants.TCP,
+					"dport", "!=", cfg.cfg.InboundTunnelPort,
+					"skuid", uid, "counter", "jump", constants.ISTIOINREDIRECT})
 		}
 		// Do not redirect app calls to back itself via Envoy when using the endpoint address
 		// e.g. appN => appN by lo
