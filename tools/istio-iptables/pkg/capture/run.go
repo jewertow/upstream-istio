@@ -364,8 +364,9 @@ func (cfg *IptablesConfigurator) Run() error {
 	}
 
 	// 127.0.0.6/::7 is bind connect from inbound passthrough cluster
-	cfg.iptables.AppendVersionedRule("127.0.0.6/32", "::6/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-		"-o", "lo", "-s", constants.IPVersionSpecific, "-j", constants.RETURN)
+	cfg.appendVersionedRule("127.0.0.6/32", "::6/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+		IptablesParams{"-o", "lo", "-s", constants.IPVersionSpecific, "-j", constants.RETURN},
+		NftablesParams{"oifname", "lo", "ip", "saddr", constants.IPVersionSpecific, "counter", "return"})
 
 	for _, uid := range split(cfg.cfg.ProxyUID) {
 		// Redirect app calls back to itself via Envoy when using the service VIP
@@ -800,4 +801,11 @@ func (cfg *IptablesConfigurator) appendRule(command iptableslog.Command, chain s
 	}
 	// TODO(jewertow): Append iptables or nftables once all rules are translated
 	cfg.iptables.AppendRule(command, chain, table, iptablesParams...)
+}
+
+func (cfg *IptablesConfigurator) appendVersionedRule(ipv4 string, ipv6 string, command iptableslog.Command, chain string, table string, iptablesParams IptablesParams, nftablesParams NftablesParams) {
+	if cfg.nftables != nil {
+		cfg.nftables.AppendVersionedRule(ipv4, ipv6, command, chain, table, nftablesParams...)
+	}
+	cfg.iptables.AppendVersionedRule(ipv4, ipv6, command, chain, table, iptablesParams...)
 }

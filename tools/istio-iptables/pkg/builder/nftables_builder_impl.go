@@ -53,6 +53,13 @@ func (b *NftablesBuilder) AppendRuleV4(command log.Command, chain string, table 
 	b.appendInternal(&b.rules.rulesv4, command, chain, table, params...)
 }
 
+// AppendVersionedRule is a wrapper around AppendRule that substitutes an ipv4/ipv6 specific value
+// in place in the params. This allows appending a dual-stack rule that has an IP value in it.
+func (b *NftablesBuilder) AppendVersionedRule(ipv4, ipv6 string, command log.Command, chain, table string, params ...string) {
+	b.AppendRuleV4(command, chain, table, replaceVersionSpecific(ipv4, params...)...)
+	// TODO(jewertow): add AppendRuleV6 once it's implemented
+}
+
 func (b *NftablesBuilder) appendInternal(nft *[]*Rule, command log.Command, chain string, table string, params ...string) {
 	*nft = append(*nft, &Rule{
 		chain:  chain,
