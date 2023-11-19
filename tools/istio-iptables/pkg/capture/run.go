@@ -343,9 +343,9 @@ func (cfg *IptablesConfigurator) Run() error {
 
 	// Use this chain also for redirecting inbound traffic to the common Envoy port
 	// when not using TPROXY.
-
-	cfg.iptables.AppendRule(iptableslog.InboundCapture, constants.ISTIOINREDIRECT, constants.NAT, "-p", constants.TCP, "-j", constants.REDIRECT,
-		"--to-ports", cfg.cfg.InboundCapturePort)
+	cfg.appendRule(iptableslog.InboundCapture, constants.ISTIOINREDIRECT, constants.NAT,
+		IptablesParams{"-p", constants.TCP, "-j", constants.REDIRECT, "--to-ports", cfg.cfg.InboundCapturePort},
+		NftablesParams{"ip", "protocol", constants.TCP, "counter", "redirect", "to", ":" + cfg.cfg.InboundCapturePort})
 
 	cfg.handleInboundPortsInclude()
 
