@@ -413,26 +413,35 @@ func (cfg *IptablesConfigurator) Run() error {
 					"!", "--dport", "53",
 					"-m", "owner", "!", "--uid-owner", uid, "-j", constants.RETURN)
 			} else {
-				cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-					"-o", "lo", "-m", "owner", "!", "--uid-owner", uid, "-j", constants.RETURN)
+				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+					IptablesParams{"-o", "lo", "-m", "owner", "!", "--uid-owner", uid, "-j", constants.RETURN},
+					NftablesParams{"oifname", "lo", "skuid", "!=", uid, "counter", "return"})
 			}
 		}
 
 		// Avoid infinite loops. Don't redirect Envoy traffic directly back to
 		// Envoy for non-loopback traffic.
-		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-			"-m", "owner", "--uid-owner", uid, "-j", constants.RETURN)
+		cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+			IptablesParams{"-m", "owner", "--uid-owner", uid, "-j", constants.RETURN},
+			NftablesParams{"skuid", uid, "counter", "return"})
 	}
 
 	for _, gid := range split(cfg.cfg.ProxyGID) {
 		// Redirect app calls back to itself via Envoy when using the service VIP
 		// e.g. appN => Envoy (client) => Envoy (server) => appN.
-		cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-			"-o", "lo",
-			"!", "-d", constants.IPVersionSpecific,
-			"-p", "tcp",
-			"!", "--dport", cfg.cfg.InboundTunnelPort,
-			"-m", "owner", "--gid-owner", gid, "-j", constants.ISTIOINREDIRECT)
+		cfg.appendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+			IptablesParams{
+				"-o", "lo",
+				"!", "-d", constants.IPVersionSpecific,
+				"-p", "tcp",
+				"!", "--dport", cfg.cfg.InboundTunnelPort,
+				"-m", "owner", "--gid-owner", gid, "-j", constants.ISTIOINREDIRECT},
+			NftablesParams{
+				"oifname", "lo",
+				"ip", "daddr", "!=", constants.IPVersionSpecific,
+				constants.TCP,
+				"dport", "!=", cfg.cfg.InboundTunnelPort,
+				"skgid", gid, "counter", "jump", constants.ISTIOINREDIRECT})
 
 		// Do not redirect app calls to back itself via Envoy when using the endpoint address
 		// e.g. appN => appN by lo
@@ -449,14 +458,17 @@ func (cfg *IptablesConfigurator) Run() error {
 					"!", "--dport", "53",
 					"-m", "owner", "!", "--gid-owner", gid, "-j", constants.RETURN)
 			} else {
-				cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-					"-o", "lo", "-m", "owner", "!", "--gid-owner", gid, "-j", constants.RETURN)
+				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+					IptablesParams{"-o", "lo", "-m", "owner", "!", "--gid-owner", gid, "-j", constants.RETURN},
+					NftablesParams{"oifname", "lo", "skgid", "!=", gid, "counter", "return"})
 			}
 		}
 
 		// Avoid infinite loops. Don't redirect Envoy traffic directly back to
 		// Envoy for non-loopback traffic.
-		cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-m", "owner", "--gid-owner", gid, "-j", constants.RETURN)
+		cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+			IptablesParams{"-m", "owner", "--gid-owner", gid, "-j", constants.RETURN},
+			NftablesParams{"skgid", gid, "counter", "return"})
 	}
 
 	ownerGroupsFilter := config.ParseInterceptFilter(cfg.cfg.OwnerGroupsInclude, cfg.cfg.OwnerGroupsExclude)
@@ -505,8 +517,9 @@ func (cfg *IptablesConfigurator) Run() error {
 	// Skip redirection for Envoy-aware applications and
 	// container-to-container traffic both of which explicitly use
 	// localhost.
-	cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-		"-d", constants.IPVersionSpecific, "-j", constants.RETURN)
+	cfg.appendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+		IptablesParams{"-d", constants.IPVersionSpecific, "-j", constants.RETURN},
+		NftablesParams{"ip", "daddr", constants.IPVersionSpecific, "counter", "return"})
 	// Apply outbound IPv4 exclusions. Must be applied before inclusions.
 	for _, cidr := range ipv4RangesExclude.CIDRs {
 		cfg.iptables.AppendRuleV4(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-d", cidr.String(), "-j", constants.RETURN)
