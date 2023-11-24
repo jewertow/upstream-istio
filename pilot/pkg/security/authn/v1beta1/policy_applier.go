@@ -16,6 +16,7 @@ package v1beta1
 
 import (
 	"fmt"
+	"sort"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
@@ -426,6 +427,10 @@ func ComposePeerAuthentication(rootNamespace string, configs []*config.Config) M
 	outputPolicy := MergedPeerAuthentication{
 		Mode: model.MTLSPermissive,
 	}
+
+	sort.Slice(configs, func(i, j int) bool {
+		return configs[i].CreationTimestamp.Before(configs[j].CreationTimestamp)
+	})
 
 	for _, cfg := range configs {
 		spec := cfg.Spec.(*v1beta1.PeerAuthentication)

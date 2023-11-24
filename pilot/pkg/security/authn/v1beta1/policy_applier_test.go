@@ -1951,6 +1951,18 @@ func TestComposePeerAuthentication(t *testing.T) {
 					},
 					Spec: &v1beta1.PeerAuthentication{
 						Mtls: &v1beta1.PeerAuthentication_MutualTLS{
+							Mode: v1beta1.PeerAuthentication_MutualTLS_STRICT,
+						},
+					},
+				},
+				{
+					Meta: config.Meta{
+						Name:              "2 seconds ago",
+						Namespace:         "root-namespace",
+						CreationTimestamp: now.Add(time.Second * -2),
+					},
+					Spec: &v1beta1.PeerAuthentication{
+						Mtls: &v1beta1.PeerAuthentication_MutualTLS{
 							Mode: v1beta1.PeerAuthentication_MutualTLS_PERMISSIVE,
 						},
 					},
@@ -1959,7 +1971,7 @@ func TestComposePeerAuthentication(t *testing.T) {
 					Meta: config.Meta{
 						Name:              "second later",
 						Namespace:         "root-namespace",
-						CreationTimestamp: now.Add(time.Second * -1),
+						CreationTimestamp: now.Add(time.Second * 1),
 					},
 					Spec: &v1beta1.PeerAuthentication{
 						Mtls: &v1beta1.PeerAuthentication_MutualTLS{
