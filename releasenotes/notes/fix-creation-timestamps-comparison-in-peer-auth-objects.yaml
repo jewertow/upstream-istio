@@ -1,0 +1,8 @@
+apiVersion: release-notes/v2
+kind: bug-fix
+area: security
+issue: []
+releaseNotes:
+  - |
+    **Fixed** nondeterministic comparison of creation timestamps in `PeerAuthentication` objects,
+    which might result in nondeterministic selection of policies when multiple policies match a common set of workloads.
