@@ -237,9 +237,12 @@ func (cfg *IptablesConfigurator) shortCircuitKubeInternalInterface() {
 
 func (cfg *IptablesConfigurator) shortCircuitExcludeInterfaces() {
 	for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {
-		cfg.iptables.AppendRule(
-			iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.NAT, "-i", excludeInterface, "-j", constants.RETURN)
-		cfg.iptables.AppendRule(iptableslog.ExcludeInterfaceCommand, constants.OUTPUT, constants.NAT, "-o", excludeInterface, "-j", constants.RETURN)
+		cfg.appendRule(iptableslog.ExcludeInterfaceCommand, constants.PREROUTING, constants.NAT,
+			IptablesParams{"-i", excludeInterface, "-j", constants.RETURN},
+			NftablesParams{"iifname", excludeInterface, "counter", "return"})
+		cfg.appendRule(iptableslog.ExcludeInterfaceCommand, constants.OUTPUT, constants.NAT,
+			IptablesParams{"-o", excludeInterface, "-j", constants.RETURN},
+			NftablesParams{"oifname", excludeInterface, "counter", "return"})
 	}
 	if cfg.cfg.InboundInterceptionMode == constants.TPROXY {
 		for _, excludeInterface := range split(cfg.cfg.ExcludeInterfaces) {

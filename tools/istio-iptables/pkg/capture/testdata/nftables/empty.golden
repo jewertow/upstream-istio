@@ -1,0 +1,16 @@
+nft add chain ip nat ISTIO_INBOUND
+nft add chain ip nat ISTIO_REDIRECT
+nft add chain ip nat ISTIO_IN_REDIRECT
+nft add chain ip nat ISTIO_OUTPUT
+nft add rule ip nat ISTIO_INBOUND tcp dport 15008 counter return
+nft add rule ip nat ISTIO_REDIRECT ip protocol tcp counter redirect to :15001
+nft add rule ip nat ISTIO_IN_REDIRECT ip protocol tcp counter redirect to :15006
+nft add rule ip nat OUTPUT ip protocol tcp counter jump ISTIO_OUTPUT
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip saddr 127.0.0.6/32 counter return
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip daddr != 127.0.0.1/32 tcp dport != 15008 skuid 1337 counter jump ISTIO_IN_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT oifname lo skuid != 1337 counter return
+nft add rule ip nat ISTIO_OUTPUT skuid 1337 counter return
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip daddr != 127.0.0.1/32 tcp dport != 15008 skgid 1337 counter jump ISTIO_IN_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT oifname lo skgid != 1337 counter return
+nft add rule ip nat ISTIO_OUTPUT skgid 1337 counter return
+nft add rule ip nat ISTIO_OUTPUT ip daddr 127.0.0.1/32 counter return

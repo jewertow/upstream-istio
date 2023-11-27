@@ -42,11 +42,13 @@ func constructTestConfig() *config.Config {
 	}
 }
 
-func TestIptables(t *testing.T) {
-	cases := []struct {
-		name   string
-		config func(cfg *config.Config)
-	}{
+type appliedRulesTestCase struct {
+	name   string
+	config func(cfg *config.Config)
+}
+
+func getTestCase() []appliedRulesTestCase {
+	return []appliedRulesTestCase{
 		{
 			"ipv6-empty-inbound-ports",
 			func(cfg *config.Config) {
@@ -265,7 +267,10 @@ func TestIptables(t *testing.T) {
 			},
 		},
 	}
-	for _, tt := range cases {
+}
+
+func TestIptables(t *testing.T) {
+	for _, tt := range getTestCase() {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := constructTestConfig()
 			tt.config(cfg)
@@ -283,18 +288,11 @@ func TestIptables(t *testing.T) {
 }
 
 func TestNftables(t *testing.T) {
-	cases := []struct {
-		name   string
-		config func(cfg *config.Config)
-	}{
-		{
-			"inbound-ports-include",
-			func(cfg *config.Config) {
-				cfg.InboundPortsInclude = "32000,31000"
-			},
-		},
-	}
-	for _, tt := range cases {
+	for _, tt := range getTestCase() {
+		//TODO(jewertow): test v6 once it's implemented
+		if strings.Contains(tt.name, "ipv6") {
+			continue
+		}
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := constructTestConfig()
 			tt.config(cfg)
