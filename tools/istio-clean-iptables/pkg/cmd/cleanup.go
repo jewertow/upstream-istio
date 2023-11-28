@@ -66,7 +66,8 @@ func removeOldChains(cfg *config.Config, ext dep.Dependencies, cmd string) {
 	if redirectDNS {
 		ownerGroupsFilter := types.ParseInterceptFilter(cfg.OwnerGroupsInclude, cfg.OwnerGroupsExclude)
 
-		common.HandleDNSUDP(common.DeleteOps, builder.NewIptablesBuilder(nil), ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
+		// TODO(jewertow): Add nftables
+		common.HandleDNSUDP(common.DeleteOps, builder.NewIptablesBuilder(nil), nil, ext, cmd, cfg.ProxyUID, cfg.ProxyGID,
 			cfg.DNSServersV4, cfg.DNSServersV6, cfg.CaptureAllDNS, ownerGroupsFilter)
 	}
 

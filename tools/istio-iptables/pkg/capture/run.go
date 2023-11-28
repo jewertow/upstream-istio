@@ -567,7 +567,7 @@ func (cfg *IptablesConfigurator) Run() error {
 
 	if redirectDNS {
 		HandleDNSUDP(
-			AppendOps, cfg.iptables, cfg.ext, "",
+			AppendOps, cfg.iptables, cfg.nftables, cfg.ext, "",
 			cfg.cfg.ProxyUID, cfg.cfg.ProxyGID,
 			cfg.cfg.DNSServersV4, cfg.cfg.DNSServersV6, cfg.cfg.CaptureAllDNS,
 			ownerGroupsFilter)
@@ -614,6 +614,7 @@ func (cfg *IptablesConfigurator) Run() error {
 
 type UDPRuleApplier struct {
 	iptables *builder.IptablesBuilder
+	nftables *builder.NftablesBuilder
 	ext      dep.Dependencies
 	ops      Ops
 	table    string
@@ -621,13 +622,17 @@ type UDPRuleApplier struct {
 	cmd      string
 }
 
-func (f UDPRuleApplier) RunV4(args ...string) {
+func (f UDPRuleApplier) RunV4(iptablesParams IptablesParams, nftablesParams NftablesParams) {
 	switch f.ops {
 	case AppendOps:
-		f.iptables.AppendRuleV4(iptableslog.UndefinedCommand, f.chain, f.table, args...)
+		if f.nftables != nil {
+			f.nftables.AppendRuleV4(iptableslog.UndefinedCommand, f.chain, f.table, nftablesParams...)
+		}
+		f.iptables.AppendRuleV4(iptableslog.UndefinedCommand, f.chain, f.table, iptablesParams...)
 	case DeleteOps:
+		// TODO(jewertow): add support for deleting rules
 		deleteArgs := []string{"-t", f.table, opsToString[f.ops], f.chain}
-		deleteArgs = append(deleteArgs, args...)
+		deleteArgs = append(deleteArgs, iptablesParams...)
 		f.ext.RunQuietlyAndIgnore(f.cmd, nil, deleteArgs...)
 	}
 }
@@ -643,9 +648,10 @@ func (f UDPRuleApplier) RunV6(args ...string) {
 	}
 }
 
-func (f UDPRuleApplier) Run(args ...string) {
-	f.RunV4(args...)
-	f.RunV6(args...)
+func (f UDPRuleApplier) Run(iptablesParams IptablesParams, nftablesParams NftablesParams) {
+	f.RunV4(iptablesParams, nftablesParams)
+	// TODO(jewertow): nftables
+	f.RunV6(iptablesParams...)
 }
 
 func (f UDPRuleApplier) WithChain(chain string) UDPRuleApplier {
@@ -661,12 +667,13 @@ func (f UDPRuleApplier) WithTable(table string) UDPRuleApplier {
 // HandleDNSUDP is a helper function to tackle with DNS UDP specific operations.
 // This helps the creation logic of DNS UDP rules in sync with the deletion.
 func HandleDNSUDP(
-	ops Ops, iptables *builder.IptablesBuilder, ext dep.Dependencies,
+	ops Ops, iptables *builder.IptablesBuilder, nftables *builder.NftablesBuilder, ext dep.Dependencies,
 	cmd, proxyUID, proxyGID string, dnsServersV4 []string, dnsServersV6 []string, captureAllDNS bool,
 	ownerGroupsFilter config.InterceptFilter,
 ) {
 	f := UDPRuleApplier{
 		iptables: iptables,
+		nftables: nftables,
 		ext:      ext,
 		ops:      ops,
 		table:    constants.NAT,
@@ -676,27 +683,30 @@ func HandleDNSUDP(
 	// Make sure that upstream DNS requests from agent/envoy dont get captured.
 	// TODO: add ip6 as well
 	for _, uid := range split(proxyUID) {
-		f.Run("-p", "udp", "--dport", "53", "-m", "owner", "--uid-owner", uid, "-j", constants.RETURN)
+		f.Run(IptablesParams{"-p", "udp", "--dport", "53", "-m", "owner", "--uid-owner", uid, "-j", constants.RETURN},
+			NftablesParams{"udp", "dport", "53", "skuid", uid, "counter", "return"})
 	}
 	for _, gid := range split(proxyGID) {
-		f.Run("-p", "udp", "--dport", "53", "-m", "owner", "--gid-owner", gid, "-j", constants.RETURN)
+		f.Run(IptablesParams{"-p", "udp", "--dport", "53", "-m", "owner", "--gid-owner", gid, "-j", constants.RETURN},
+			NftablesParams{"udp", "dport", "53", "skgid", gid, "counter", "return"})
 	}
 
 	if ownerGroupsFilter.Except {
 		for _, group := range ownerGroupsFilter.Values {
-			f.Run("-p", "udp", "--dport", "53", "-m", "owner", "--gid-owner", group, "-j", constants.RETURN)
+			f.Run(IptablesParams{"-p", "udp", "--dport", "53", "-m", "owner", "--gid-owner", group, "-j", constants.RETURN}, NftablesParams{})
 		}
 	} else {
 		groupIsNoneOf := CombineMatchers(ownerGroupsFilter.Values, func(group string) []string {
 			return []string{"-m", "owner", "!", "--gid-owner", group}
 		})
-		f.Run(Flatten([]string{"-p", "udp", "--dport", "53"}, groupIsNoneOf, []string{"-j", constants.RETURN})...)
+		f.Run(Flatten([]string{"-p", "udp", "--dport", "53"}, groupIsNoneOf, []string{"-j", constants.RETURN}),
+			NftablesParams{})
 	}
 
 	if captureAllDNS {
 		// Redirect all UDP dns traffic on port 53 to the agent on port 15053
 		// This will be useful for the CNI case where pod DNS server address cannot be decided.
-		f.Run("-p", "udp", "--dport", "53", "-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort)
+		f.Run(IptablesParams{"-p", "udp", "--dport", "53", "-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort}, NftablesParams{})
 	} else {
 		// redirect all UDP dns traffic on port 53 to the agent on port 15053 for all servers
 		// in etc/resolv.conf
@@ -706,8 +716,9 @@ func HandleDNSUDP(
 		// Note: If a user somehow configured etc/resolv.conf to point to dnsmasq and server X, and dnsmasq also
 		// pointed to server X, this would not work. However, the assumption is that is not a common case.
 		for _, s := range dnsServersV4 {
-			f.RunV4("-p", "udp", "--dport", "53", "-d", s+"/32",
-				"-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort)
+			f.RunV4(
+				IptablesParams{"-p", "udp", "--dport", "53", "-d", s + "/32", "-j", constants.REDIRECT, "--to-port", constants.IstioAgentDNSListenerPort},
+				NftablesParams{"ip", "daddr", s + "/32", "udp", "dport", "53", "counter", "redirect", "to", ":" + constants.IstioAgentDNSListenerPort})
 		}
 		for _, s := range dnsServersV6 {
 			f.RunV6("-p", "udp", "--dport", "53", "-d", s+"/128",
@@ -728,36 +739,40 @@ func addConntrackZoneDNSUDP(
 	// TODO: add ip6 as well
 	for _, uid := range split(proxyUID) {
 		// Packets with dst port 53 from istio to zone 1. These are Istio calls to upstream resolvers
-		f.Run("-p", "udp", "--dport", "53", "-m", "owner", "--uid-owner", uid, "-j", constants.CT, "--zone", "1")
+		f.Run(IptablesParams{"-p", "udp", "--dport", "53", "-m", "owner", "--uid-owner", uid, "-j", constants.CT, "--zone", "1"},
+			NftablesParams{"udp", "dport", "53", "skuid", uid, "ct", "zone", "set", "1", "counter"})
 		// Packets with src port 15053 from istio to zone 2. These are Istio response packets to application clients
-		f.Run("-p", "udp", "--sport", "15053", "-m", "owner", "--uid-owner", uid, "-j", constants.CT, "--zone", "2")
+		f.Run(IptablesParams{"-p", "udp", "--sport", "15053", "-m", "owner", "--uid-owner", uid, "-j", constants.CT, "--zone", "2"},
+			NftablesParams{"udp", "sport", "15053", "skuid", uid, "ct", "zone", "set", "2", "counter"})
 	}
 	for _, gid := range split(proxyGID) {
 		// Packets with dst port 53 from istio to zone 1. These are Istio calls to upstream resolvers
-		f.Run("-p", "udp", "--dport", "53", "-m", "owner", "--gid-owner", gid, "-j", constants.CT, "--zone", "1")
+		f.Run(IptablesParams{"-p", "udp", "--dport", "53", "-m", "owner", "--gid-owner", gid, "-j", constants.CT, "--zone", "1"},
+			NftablesParams{"udp", "dport", "53", "skgid", gid, "ct", "zone", "set", "1", "counter"})
 		// Packets with src port 15053 from istio to zone 2. These are Istio response packets to application clients
-		f.Run("-p", "udp", "--sport", "15053", "-m", "owner", "--gid-owner", gid, "-j", constants.CT, "--zone", "2")
-
+		f.Run(IptablesParams{"-p", "udp", "--sport", "15053", "-m", "owner", "--gid-owner", gid, "-j", constants.CT, "--zone", "2"},
+			NftablesParams{"udp", "sport", "15053", "skgid", gid, "ct", "zone", "set", "2", "counter"})
 	}
 
 	if captureAllDNS {
 		// Not specifying destination address is useful for the CNI case where pod DNS server address cannot be decided.
 
 		// Mark all UDP dns traffic with dst port 53 as zone 2. These are application client packets towards DNS resolvers.
-		f.Run("-p", "udp", "--dport", "53",
-			"-j", constants.CT, "--zone", "2")
+		f.Run(IptablesParams{"-p", "udp", "--dport", "53",
+			"-j", constants.CT, "--zone", "2"}, NftablesParams{})
 		// Mark all UDP dns traffic with src port 53 as zone 1. These are response packets from the DNS resolvers.
-		f.WithChain(constants.PREROUTING).Run("-p", "udp", "--sport", "53",
-			"-j", constants.CT, "--zone", "1")
+		f.WithChain(constants.PREROUTING).Run(IptablesParams{"-p", "udp", "--sport", "53",
+			"-j", constants.CT, "--zone", "1"}, NftablesParams{})
 	} else {
 		// Go through all DNS servers in etc/resolv.conf and mark the packets based on these destination addresses.
 		for _, s := range dnsServersV4 {
 			// Mark all UDP dns traffic with dst port 53 as zone 2. These are application client packets towards DNS resolvers.
-			f.RunV4("-p", "udp", "--dport", "53", "-d", s+"/32",
-				"-j", constants.CT, "--zone", "2")
+			f.RunV4(IptablesParams{"-p", "udp", "--dport", "53", "-d", s + "/32", "-j", constants.CT, "--zone", "2"},
+				NftablesParams{"ip", "daddr", s + "/32", "udp", "dport", "53", "ct", "zone", "set", "2", "counter"})
 			// Mark all UDP dns traffic with src port 53 as zone 1. These are response packets from the DNS resolvers.
-			f.WithChain(constants.PREROUTING).RunV4("-p", "udp", "--sport", "53", "-s", s+"/32",
-				"-j", constants.CT, "--zone", "1")
+			f.WithChain(constants.PREROUTING).RunV4(
+				IptablesParams{"-p", "udp", "--sport", "53", "-s", s + "/32", "-j", constants.CT, "--zone", "1"},
+				NftablesParams{"ip", "daddr", s + "/32", "udp", "sport", "53", "ct", "zone", "set", "1", "counter"})
 		}
 		for _, s := range dnsServersV6 {
 			// Mark all UDP dns traffic with dst port 53 as zone 2. These are application client packets towards DNS resolvers.
