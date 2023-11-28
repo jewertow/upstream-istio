@@ -1,0 +1,41 @@
+nft add chain ip nat ISTIO_INBOUND
+nft add chain ip nat ISTIO_REDIRECT
+nft add chain ip nat ISTIO_IN_REDIRECT
+nft add chain ip nat ISTIO_OUTPUT
+nft add rule ip nat ISTIO_INBOUND tcp dport 15008 counter return
+nft add rule ip nat ISTIO_REDIRECT ip protocol tcp counter redirect to :15001
+nft add rule ip nat ISTIO_IN_REDIRECT ip protocol tcp counter redirect to :15006
+nft add rule ip nat OUTPUT ip protocol tcp counter jump ISTIO_OUTPUT
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip saddr 127.0.0.6/32 counter return
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip protocol tcp ip daddr != 127.0.0.1/32 tcp dport != {53,15008} skuid 3 counter jump ISTIO_IN_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT oifname lo tcp dport != 53 skuid != 3 counter return
+nft add rule ip nat ISTIO_OUTPUT skuid 3 counter return
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip protocol tcp ip daddr != 127.0.0.1/32 tcp dport != {53,15008} skuid 4 counter jump ISTIO_IN_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT oifname lo tcp dport != 53 skuid != 4 counter return
+nft add rule ip nat ISTIO_OUTPUT skuid 4 counter return
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip daddr != 127.0.0.1/32 tcp dport != 15008 skgid 1 counter jump ISTIO_IN_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT oifname lo tcp dport != 53 skgid != 1 counter return
+nft add rule ip nat ISTIO_OUTPUT skgid 1 counter return
+nft add rule ip nat ISTIO_OUTPUT oifname lo ip daddr != 127.0.0.1/32 tcp dport != 15008 skgid 2 counter jump ISTIO_IN_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT oifname lo tcp dport != 53 skgid != 2 counter return
+nft add rule ip nat ISTIO_OUTPUT skgid 2 counter return
+nft add rule ip nat ISTIO_OUTPUT ip daddr 127.0.0.53/32 tcp dport 53 counter redirect to :15053
+nft add rule ip nat ISTIO_OUTPUT ip daddr 127.0.0.1/32 counter return
+nft add rule ip nat ISTIO_OUTPUT ip daddr 1.1.0.0/16 counter return
+nft add rule ip nat ISTIO_OUTPUT ip daddr 9.9.0.0/16 counter jump ISTIO_REDIRECT
+nft add rule ip nat ISTIO_OUTPUT counter return
+iptables -t nat -A OUTPUT -p udp --dport 53 -m owner --uid-owner 3 -j RETURN
+iptables -t nat -A OUTPUT -p udp --dport 53 -m owner --uid-owner 4 -j RETURN
+iptables -t nat -A OUTPUT -p udp --dport 53 -m owner --gid-owner 1 -j RETURN
+iptables -t nat -A OUTPUT -p udp --dport 53 -m owner --gid-owner 2 -j RETURN
+iptables -t nat -A OUTPUT -p udp --dport 53 -d 127.0.0.53/32 -j REDIRECT --to-port 15053
+iptables -t raw -A OUTPUT -p udp --dport 53 -m owner --uid-owner 3 -j CT --zone 1
+iptables -t raw -A OUTPUT -p udp --sport 15053 -m owner --uid-owner 3 -j CT --zone 2
+iptables -t raw -A OUTPUT -p udp --dport 53 -m owner --uid-owner 4 -j CT --zone 1
+iptables -t raw -A OUTPUT -p udp --sport 15053 -m owner --uid-owner 4 -j CT --zone 2
+iptables -t raw -A OUTPUT -p udp --dport 53 -m owner --gid-owner 1 -j CT --zone 1
+iptables -t raw -A OUTPUT -p udp --sport 15053 -m owner --gid-owner 1 -j CT --zone 2
+iptables -t raw -A OUTPUT -p udp --dport 53 -m owner --gid-owner 2 -j CT --zone 1
+iptables -t raw -A OUTPUT -p udp --sport 15053 -m owner --gid-owner 2 -j CT --zone 2
+iptables -t raw -A OUTPUT -p udp --dport 53 -d 127.0.0.53/32 -j CT --zone 2
+iptables -t raw -A PREROUTING -p udp --sport 53 -s 127.0.0.53/32 -j CT --zone 1

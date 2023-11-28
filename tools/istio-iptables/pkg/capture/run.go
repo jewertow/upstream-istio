@@ -203,13 +203,15 @@ func (cfg *IptablesConfigurator) handleInboundPortsInclude() {
 
 func (cfg *IptablesConfigurator) handleOutboundIncludeRules(
 	rangeInclude NetworkRange,
-	appendRule func(command iptableslog.Command, chain string, table string, params ...string) *builder.IptablesBuilder,
+	appendRule func(command iptableslog.Command, chain string, table string, iptablesParams IptablesParams, nftablesParams NftablesParams) *builder.IptablesBuilder,
 	insert func(command iptableslog.Command, chain string, table string, position int, params ...string) *builder.IptablesBuilder,
 ) {
 	// Apply outbound IP inclusions.
 	if rangeInclude.IsWildcard {
 		// Wildcard specified. Redirect all remaining outbound traffic to Envoy.
-		appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-j", constants.ISTIOREDIRECT)
+		appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+			IptablesParams{"-j", constants.ISTIOREDIRECT},
+			NftablesParams{"counter", "jump", constants.ISTIOREDIRECT})
 		for _, internalInterface := range split(cfg.cfg.KubeVirtInterfaces) {
 			insert(iptableslog.KubevirtCommand,
 				constants.PREROUTING, constants.NAT, 1, "-i", internalInterface, "-j", constants.ISTIOREDIRECT)
@@ -221,11 +223,14 @@ func (cfg *IptablesConfigurator) handleOutboundIncludeRules(
 				insert(iptableslog.KubevirtCommand, constants.PREROUTING, constants.NAT, 1, "-i", internalInterface,
 					"-d", cidr.String(), "-j", constants.ISTIOREDIRECT)
 			}
-			appendRule(iptableslog.UndefinedCommand,
-				constants.ISTIOOUTPUT, constants.NAT, "-d", cidr.String(), "-j", constants.ISTIOREDIRECT)
+			appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+				IptablesParams{"-d", cidr.String(), "-j", constants.ISTIOREDIRECT},
+				NftablesParams{"ip", "daddr", cidr.String(), "counter", "jump", constants.ISTIOREDIRECT})
 		}
 		// All other traffic is not redirected.
-		appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-j", constants.RETURN)
+		appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+			IptablesParams{"-j", constants.RETURN},
+			NftablesParams{"counter", "return"})
 	}
 }
 
@@ -380,13 +385,21 @@ func (cfg *IptablesConfigurator) Run() error {
 			// app => istio-agent => Envoy inbound => dns server
 			// Instead, we just have:
 			// app => istio-agent => dns server
-			cfg.iptables.AppendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-				"-o", "lo",
-				"!", "-d", constants.IPVersionSpecific,
-				"-p", "tcp",
-				"-m", "multiport",
-				"!", "--dports", "53,"+cfg.cfg.InboundTunnelPort,
-				"-m", "owner", "--uid-owner", uid, "-j", constants.ISTIOINREDIRECT)
+			cfg.appendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+				IptablesParams{
+					"-o", "lo",
+					"!", "-d", constants.IPVersionSpecific,
+					"-p", "tcp",
+					"-m", "multiport",
+					"!", "--dports", "53," + cfg.cfg.InboundTunnelPort,
+					"-m", "owner", "--uid-owner", uid, "-j", constants.ISTIOINREDIRECT},
+				// nft add rule ip nat ISTIO_OUTPUT oifname lo ip protocol tcp ip daddr != 127.0.0.1/32 tcp dport != { 53,15008} skuid 3 counter jump ISTIO_IN_REDIRECT
+				NftablesParams{
+					"oifname", "lo",
+					"ip", "protocol", constants.TCP,
+					"ip", "daddr", "!=", constants.IPVersionSpecific,
+					constants.TCP, "dport", "!=", fmt.Sprintf("{53,%s}", cfg.cfg.InboundTunnelPort),
+					"skuid", uid, "counter", "jump", constants.ISTIOINREDIRECT})
 		} else {
 			cfg.appendVersionedRule("127.0.0.1/32", "::1/128", iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
 				IptablesParams{
@@ -412,9 +425,13 @@ func (cfg *IptablesConfigurator) Run() error {
 				// handle this case, we exclude port 53 from this rule. Note: We cannot just move the
 				// port 53 redirection rule further up the list, as we will want to avoid capturing
 				// DNS requests from the proxy UID/GID
-				cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-o", "lo", "-p", "tcp",
-					"!", "--dport", "53",
-					"-m", "owner", "!", "--uid-owner", uid, "-j", constants.RETURN)
+				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+					IptablesParams{
+						"-o", "lo", "-p", constants.TCP, "!", "--dport", "53",
+						"-m", "owner", "!", "--uid-owner", uid, "-j", constants.RETURN},
+					NftablesParams{
+						"oifname", "lo", constants.TCP, "dport", "!=", "53",
+						"skuid", "!=", uid, "counter", "return"})
 			} else {
 				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
 					IptablesParams{"-o", "lo", "-m", "owner", "!", "--uid-owner", uid, "-j", constants.RETURN},
@@ -456,10 +473,15 @@ func (cfg *IptablesConfigurator) Run() error {
 				// handle this case, we exclude port 53 from this rule. Note: We cannot just move the
 				// port 53 redirection rule further up the list, as we will want to avoid capturing
 				// DNS requests from the proxy UID/GID
-				cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
-					"-o", "lo", "-p", "tcp",
-					"!", "--dport", "53",
-					"-m", "owner", "!", "--gid-owner", gid, "-j", constants.RETURN)
+				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+					IptablesParams{
+						"-o", "lo", "-p", "tcp",
+						"!", "--dport", "53",
+						"-m", "owner", "!", "--gid-owner", gid, "-j", constants.RETURN},
+					NftablesParams{
+						"oifname", "lo", constants.TCP,
+						"dport", "!=", "53",
+						"skgid", "!=", gid, "counter", "return"})
 			} else {
 				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
 					IptablesParams{"-o", "lo", "-m", "owner", "!", "--gid-owner", gid, "-j", constants.RETURN},
@@ -479,6 +501,7 @@ func (cfg *IptablesConfigurator) Run() error {
 	cfg.handleCaptureByOwnerGroup(ownerGroupsFilter)
 
 	if redirectDNS {
+		// TODO(jewertow): add a test case
 		if cfg.cfg.CaptureAllDNS {
 			// Redirect all TCP dns traffic on port 53 to the agent on port 15053
 			// This will be useful for the CNI case where pod DNS server address cannot be decided.
@@ -497,13 +520,17 @@ func (cfg *IptablesConfigurator) Run() error {
 				// This ensures that we do not get requests from dnsmasq sent back to the agent dns server in a loop.
 				// Note: If a user somehow configured etc/resolv.conf to point to dnsmasq and server X, and dnsmasq also
 				// pointed to server X, this would not work. However, the assumption is that is not a common case.
-				cfg.iptables.AppendRuleV4(iptableslog.UndefinedCommand,
-					constants.ISTIOOUTPUT, constants.NAT,
-					"-p", constants.TCP,
-					"--dport", "53",
-					"-d", s+"/32",
-					"-j", constants.REDIRECT,
-					"--to-ports", constants.IstioAgentDNSListenerPort)
+				cfg.appendRuleV4(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+					IptablesParams{
+						"-p", constants.TCP,
+						"--dport", "53",
+						"-d", s + "/32",
+						"-j", constants.REDIRECT,
+						"--to-ports", constants.IstioAgentDNSListenerPort},
+					NftablesParams{
+						"ip", "daddr", s + "/32",
+						constants.TCP, "dport", "53",
+						"counter", "redirect", "to", ":" + constants.IstioAgentDNSListenerPort})
 			}
 			for _, s := range cfg.cfg.DNSServersV6 {
 				cfg.iptables.AppendRuleV6(iptableslog.UndefinedCommand,
@@ -525,7 +552,9 @@ func (cfg *IptablesConfigurator) Run() error {
 		NftablesParams{"ip", "daddr", constants.IPVersionSpecific, "counter", "return"})
 	// Apply outbound IPv4 exclusions. Must be applied before inclusions.
 	for _, cidr := range ipv4RangesExclude.CIDRs {
-		cfg.iptables.AppendRuleV4(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-d", cidr.String(), "-j", constants.RETURN)
+		cfg.appendRuleV4(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT,
+			IptablesParams{"-d", cidr.String(), "-j", constants.RETURN},
+			NftablesParams{"ip", "daddr", cidr.String(), "counter", "return"})
 	}
 	for _, cidr := range ipv6RangesExclude.CIDRs {
 		cfg.iptables.AppendRuleV6(iptableslog.UndefinedCommand, constants.ISTIOOUTPUT, constants.NAT, "-d", cidr.String(), "-j", constants.RETURN)
@@ -533,8 +562,8 @@ func (cfg *IptablesConfigurator) Run() error {
 
 	cfg.handleOutboundPortsInclude()
 
-	cfg.handleOutboundIncludeRules(ipv4RangesInclude, cfg.iptables.AppendRuleV4, cfg.iptables.InsertRuleV4)
-	cfg.handleOutboundIncludeRules(ipv6RangesInclude, cfg.iptables.AppendRuleV6, cfg.iptables.InsertRuleV6)
+	cfg.handleOutboundIncludeRules(ipv4RangesInclude, cfg.appendRuleV4, cfg.iptables.InsertRuleV4)
+	cfg.handleOutboundIncludeRules(ipv6RangesInclude, cfg.appendRuleV6, cfg.iptables.InsertRuleV6)
 
 	if redirectDNS {
 		HandleDNSUDP(
@@ -823,7 +852,29 @@ func (cfg *IptablesConfigurator) appendRule(command iptableslog.Command, chain s
 		cfg.nftables.AppendRuleV4(command, chain, table, nftablesParams...)
 	}
 	// TODO(jewertow): Append iptables or nftables once all rules are translated
-	cfg.iptables.AppendRule(command, chain, table, iptablesParams...)
+	cfg.iptables.AppendRuleV4(command, chain, table, iptablesParams...)
+	cfg.iptables.AppendRuleV6(command, chain, table, iptablesParams...)
+}
+
+// TODO(jewertow): remove returned type
+func (cfg *IptablesConfigurator) appendRuleV4(command iptableslog.Command, chain string, table string, iptablesParams IptablesParams, nftablesParams NftablesParams) *builder.IptablesBuilder {
+	if cfg.nftables != nil {
+		cfg.nftables.AppendRuleV4(command, chain, table, nftablesParams...)
+	}
+	// TODO(jewertow): Append iptables or nftables once all rules are translated
+	cfg.iptables.AppendRuleV4(command, chain, table, iptablesParams...)
+	return nil
+}
+
+// TODO(jewertow): remove returned type
+func (cfg *IptablesConfigurator) appendRuleV6(command iptableslog.Command, chain string, table string, iptablesParams IptablesParams, nftablesParams NftablesParams) *builder.IptablesBuilder {
+	if cfg.nftables != nil {
+		// TODO(jewertow)
+		//cfg.nftables.AppendRuleV6(command, chain, table, nftablesParams...)
+	}
+	// TODO(jewertow): Append iptables or nftables once all rules are translated
+	cfg.iptables.AppendRuleV6(command, chain, table, iptablesParams...)
+	return nil
 }
 
 func (cfg *IptablesConfigurator) appendVersionedRule(ipv4 string, ipv6 string, command iptableslog.Command, chain string, table string, iptablesParams IptablesParams, nftablesParams NftablesParams) {
