@@ -180,8 +180,9 @@ func (cfg *IptablesConfigurator) handleInboundPortsInclude() {
 				cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.MANGLE, "-p", constants.TCP,
 					"-j", constants.ISTIOTPROXY)
 			} else {
-				cfg.iptables.AppendRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.NAT, "-p", constants.TCP,
-					"-j", constants.ISTIOINREDIRECT)
+				cfg.appendRule(iptableslog.UndefinedCommand, constants.ISTIOINBOUND, constants.NAT,
+					IptablesParams{"-p", constants.TCP, "-j", constants.ISTIOINREDIRECT},
+					NftablesParams{"ip", "protocol", constants.TCP, "counter", "jump", constants.ISTIOINREDIRECT})
 			}
 		} else {
 			// User has specified a non-empty list of ports to be redirected to Envoy.

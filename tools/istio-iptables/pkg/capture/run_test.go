@@ -290,12 +290,12 @@ func TestIptables(t *testing.T) {
 func TestNftables(t *testing.T) {
 	for _, tt := range getTestCase() {
 		//TODO(jewertow): test v6 once it's implemented
-		if strings.Contains(tt.name, "ipv6") {
-			continue
-		}
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := constructTestConfig()
 			tt.config(cfg)
+			if cfg.EnableInboundIPv6 || cfg.InboundInterceptionMode == constants.TPROXY {
+				return
+			}
 			iptConfigurator := NewIptablesConfigurator(cfg, &dep.StdoutStubDependencies{}, true)
 			if err := iptConfigurator.Run(); err != nil {
 				t.Errorf("failed to run iptables configurator: %s", err)
