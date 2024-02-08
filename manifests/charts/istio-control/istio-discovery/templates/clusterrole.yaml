@@ -73,7 +73,7 @@ rules:
   # required for CA's namespace controller
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["create", "get", "list", "watch", "update"]
+    verbs: ["get", "list", "watch"]
 
   # Istiod and bootstrap.
 {{- $omitCertProvidersForClusterRole := list "istiod" "custom" "none"}}

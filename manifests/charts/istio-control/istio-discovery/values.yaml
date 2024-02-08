@@ -3,6 +3,7 @@ defaults:
 
   ## Discovery Settings
   pilot:
+    configmapNamespaces: []
     autoscaleEnabled: true
     autoscaleMin: 1
     autoscaleMax: 5
