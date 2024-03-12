@@ -93,4 +93,6 @@ var (
 	UseCacertsForSelfSignedCA = env.Register("USE_CACERTS_FOR_SELF_SIGNED_CA", false,
 		"If enabled, istiod will use a secret named cacerts to store its self-signed istio-"+
 			"generated root certificate.").Get()
+
+	SdsRootCA = env.Register("ROOT_CA_SDS_CLUSTER_NAME", "sds-grpc", "Envoy cluster name of the SDS server for root CA.")
 )
