@@ -463,6 +463,7 @@ func (lb *ListenerBuilder) buildSidecarOutboundListeners(node *model.Proxy,
 						}
 						continue
 					}
+
 					listenerOpts := outboundListenerOpts{
 						push:    push,
 						proxy:   node,
