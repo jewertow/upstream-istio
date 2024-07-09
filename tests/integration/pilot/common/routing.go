@@ -3488,13 +3488,12 @@ spec:
     protocol: HTTP
 `, map[string]any{"IPs": ips})
 	}
-	ipv4 := "1.2.3.4"
-	ipv6 := "1234:1234:1234::1234:1234:1234"
+	ipv4 := []string{"1.2.3.4", "1.2.3.5"}
+	ipv6 := []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
 	dummyLocalhostServer := "127.0.0.1"
 	cases := []struct {
-		name string
-		// TODO(https://github.com/istio/istio/issues/30282) support multiple vips
-		ips      string
+		name     string
+		ips      []string
 		protocol string
 		server   string
 		skipCNI  bool
@@ -3503,25 +3502,25 @@ spec:
 		{
 			name:     "tcp ipv4",
 			ips:      ipv4,
-			expected: []string{ipv4},
+			expected: ipv4,
 			protocol: "tcp",
 		},
 		{
 			name:     "udp ipv4",
 			ips:      ipv4,
-			expected: []string{ipv4},
+			expected: ipv4,
 			protocol: "udp",
 		},
 		{
 			name:     "tcp ipv6",
 			ips:      ipv6,
-			expected: []string{ipv6},
+			expected: ipv6,
 			protocol: "tcp",
 		},
 		{
 			name:     "udp ipv6",
 			ips:      ipv6,
-			expected: []string{ipv6},
+			expected: ipv6,
 			protocol: "udp",
 		},
 		{
@@ -3571,7 +3570,7 @@ spec:
 			}
 			t.RunTraffic(TrafficTestCase{
 				name:   fmt.Sprintf("%s/%s", client.Config().Service, tt.name),
-				config: makeSE(tt.ips),
+				config: makeSE(tt.ips...),
 				call:   client.CallOrFail,
 				opts: echo.CallOptions{
 					Scheme:  scheme.DNS,
