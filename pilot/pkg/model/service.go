@@ -1287,7 +1287,8 @@ func (s *Service) GetAddressForProxy(node *Proxy) string {
 	if node.Metadata != nil {
 		if node.Metadata.ClusterID != "" {
 			addresses := s.ClusterVIPs.GetAddressesFor(node.Metadata.ClusterID)
-			if len(addresses) > 0 {
+			// if addresses=[0.0.0.0] we must check if DNS auto-allocations is enabled and return allocated address if necessary
+			if len(addresses) > 1 {
 				return addresses[0]
 			}
 		}

@@ -188,6 +188,7 @@ func TestNameTable(t *testing.T) {
 			Namespace:       "testns",
 			ServiceRegistry: provider.External,
 		},
+		ClusterVIPs: model.AddressMap{Addresses: map[cluster.ID][]string{"Kubernetes": {"10.0.0.5"}}},
 	}
 	serviceWithVIP2 := serviceWithVIP1.DeepCopy()
 	serviceWithVIP2.DefaultAddress = "10.0.0.6"
