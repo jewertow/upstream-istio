@@ -45,7 +45,14 @@ func BuildNameTable(cfg Config) *dnsProto.NameTable {
 		var addressList []string
 		hostName := svc.Hostname
 		headless := false
-		for _, svcAddress := range svc.GetAddresses(&model.Proxy{Metadata: &model.NodeMetadata{ClusterID: ""}}) {
+		var svcAddresses []string
+		if svc.Attributes.ServiceRegistry == provider.Kubernetes {
+			svcAddresses = svc.GetAllAddressesForProxy(cfg.Node)
+		} else {
+			// Get all svc addresses for all clusters, e.g. ServiceEntry created in primary-remote deployment.
+			svcAddresses = svc.GetAddresses(&model.Proxy{Metadata: &model.NodeMetadata{ClusterID: ""}})
+		}
+		for _, svcAddress := range svcAddresses {
 			if svcAddress == constants.UnspecifiedIP {
 				headless = true
 				break
