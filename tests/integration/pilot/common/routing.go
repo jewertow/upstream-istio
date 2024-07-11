@@ -3578,7 +3578,6 @@ spec:
 					Address: address,
 					Check:   checker,
 				},
-				globalConfig: true,
 			})
 		}
 	}
