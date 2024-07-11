@@ -45,7 +45,7 @@ func BuildNameTable(cfg Config) *dnsProto.NameTable {
 		var addressList []string
 		hostName := svc.Hostname
 		headless := false
-		for _, svcAddress := range svc.GetAllAddressesForProxy(cfg.Node) {
+		for _, svcAddress := range svc.ClusterVIPs.Addresses[cfg.Node.Metadata.ClusterID] {
 			if svcAddress == constants.UnspecifiedIP {
 				headless = true
 				break
