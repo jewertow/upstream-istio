@@ -52,8 +52,8 @@ func BuildNameTable(cfg Config) *dnsProto.NameTable {
 			// Get all svc addresses for all clusters, e.g. ServiceEntry created in primary-remote deployment
 			// where primary(CLUSTER_ID=a) and remote(CLUSTER_ID=b).
 			svcAddresses = svc.GetAddresses(&model.Proxy{Metadata: &model.NodeMetadata{ClusterID: ""}})
-			// if headless or auto-allocation is enabled
-			if len(svcAddresses) == 0 || len(svcAddresses) == 1 && svcAddresses[0] == constants.UnspecifiedIP {
+			// if a service has only one address, and it is 0.0.0.0, we must try to get an auto-allocated address
+			if len(svcAddresses) == 1 && svcAddresses[0] == constants.UnspecifiedIP {
 				svcAddresses = []string{svc.GetAddressForProxy(cfg.Node)}
 			}
 		}

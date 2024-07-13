@@ -96,6 +96,11 @@ func TestNameTable(t *testing.T) {
 	headlessService := &model.Service{
 		Hostname:       host.Name("headless-svc.testns.svc.cluster.local"),
 		DefaultAddress: constants.UnspecifiedIP,
+		ClusterVIPs: model.AddressMap{
+			Addresses: map[cluster.ID][]string{
+				"Kubernetes": {constants.UnspecifiedIP},
+			},
+		},
 		Ports: model.PortList{&model.Port{
 			Name:     "tcp-port",
 			Port:     9000,
@@ -112,6 +117,11 @@ func TestNameTable(t *testing.T) {
 	headlessServiceForServiceEntry := &model.Service{
 		Hostname:       host.Name("foo.bar.com"),
 		DefaultAddress: constants.UnspecifiedIP,
+		ClusterVIPs: model.AddressMap{
+			Addresses: map[cluster.ID][]string{
+				"Kubernetes": {constants.UnspecifiedIP},
+			},
+		},
 		Ports: model.PortList{&model.Port{
 			Name:     "tcp-port",
 			Port:     9000,
