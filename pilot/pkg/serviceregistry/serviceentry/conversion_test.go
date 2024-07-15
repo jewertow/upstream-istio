@@ -589,7 +589,7 @@ func makeInstanceWithServiceAccount(cfg *config.Config, addresses []string, port
 func makeTarget(cfg *config.Config, address string, port int,
 	svcPort *networking.ServicePort, svcLabels map[string]string, mtlsMode MTLSMode,
 ) model.ServiceTarget {
-	services := convertServices(*cfg, "")
+	services := ConvertServices(*cfg, "")
 	svc := services[0] // default
 	for _, s := range services {
 		if string(s.Hostname) == address {
@@ -620,7 +620,7 @@ func makeTarget(cfg *config.Config, address string, port int,
 func makeInstance(cfg *config.Config, addresses []string, port int,
 	svcPort *networking.ServicePort, svcLabels map[string]string, mtlsMode MTLSMode,
 ) *model.ServiceInstance {
-	services := convertServices(*cfg, "")
+	services := ConvertServices(*cfg, "")
 	svc := services[0] // default
 	getSvc := false
 	for _, s := range services {
@@ -783,7 +783,7 @@ func testConvertServiceBody(t *testing.T) {
 	})
 
 	for _, tt := range serviceTests {
-		services := convertServices(*tt.externalSvc, "")
+		services := ConvertServices(*tt.externalSvc, "")
 		if err := compare(t, services, tt.services); err != nil {
 			t.Errorf("testcase: %v\n%v ", tt.externalSvc.Name, err)
 		}
@@ -970,7 +970,7 @@ func TestConvertWorkloadEntryToServiceInstances(t *testing.T) {
 
 	for _, tt := range serviceInstanceTests {
 		t.Run(tt.name, func(t *testing.T) {
-			services := convertServices(*tt.se, "")
+			services := ConvertServices(*tt.se, "")
 			s := &Controller{meshWatcher: mesh.NewFixedWatcher(mesh.DefaultMeshConfig())}
 			instances := s.convertWorkloadEntryToServiceInstances(tt.wle, services, tt.se.Spec.(*networking.ServiceEntry), &configKey{}, tt.clusterID)
 			sortServiceInstances(instances)

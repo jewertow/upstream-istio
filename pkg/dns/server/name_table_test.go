@@ -15,6 +15,12 @@
 package server_test
 
 import (
+	"istio.io/api/networking/v1alpha3"
+	"istio.io/istio/pilot/pkg/serviceregistry/kube"
+	"istio.io/istio/pilot/pkg/serviceregistry/serviceentry"
+	"istio.io/istio/pkg/config"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -25,7 +31,6 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	"istio.io/istio/pkg/cluster"
-	"istio.io/istio/pkg/config/constants"
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/protocol"
 	dnsProto "istio.io/istio/pkg/dns/proto"
@@ -93,48 +98,34 @@ func TestNameTable(t *testing.T) {
 		DNSDomain:   "testns.svc.cluster.local",
 	}
 
-	headlessService := &model.Service{
-		Hostname:       host.Name("headless-svc.testns.svc.cluster.local"),
-		DefaultAddress: constants.UnspecifiedIP,
-		ClusterVIPs: model.AddressMap{
-			Addresses: map[cluster.ID][]string{
-				"Kubernetes": {constants.UnspecifiedIP},
-			},
+	headlessService := kube.ConvertService(corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "headless-svc",
+			Namespace: "testns",
 		},
-		Ports: model.PortList{&model.Port{
-			Name:     "tcp-port",
-			Port:     9000,
-			Protocol: protocol.TCP,
-		}},
-		Resolution: model.Passthrough,
-		Attributes: model.ServiceAttributes{
-			Name:            "headless-svc",
-			Namespace:       "testns",
-			ServiceRegistry: provider.Kubernetes,
+		Spec: corev1.ServiceSpec{
+			ClusterIP: corev1.ClusterIPNone,
+			Ports: []corev1.ServicePort{{
+				Name:     "tcp-port",
+				Port:     9000,
+				Protocol: corev1.ProtocolTCP,
+			}},
 		},
-	}
+	}, "cluster.local", "Kubernetes", nil)
 
-	headlessServiceForServiceEntry := &model.Service{
-		Hostname:       host.Name("foo.bar.com"),
-		DefaultAddress: constants.UnspecifiedIP,
-		ClusterVIPs: model.AddressMap{
-			Addresses: map[cluster.ID][]string{
-				"Kubernetes": {constants.UnspecifiedIP},
+	headlessServiceForServiceEntry := serviceentry.ConvertServices(config.Config{
+		Spec: &v1alpha3.ServiceEntry{
+			Hosts: []string{"foo.bar.com"},
+			Ports: []*v1alpha3.ServicePort{{
+				Name:     "tcp-port",
+				Number:   9000,
+				Protocol: "TCP",
+			}},
+			WorkloadSelector: &v1alpha3.WorkloadSelector{
+				Labels: map[string]string{"wl": "headless-foobar"},
 			},
 		},
-		Ports: model.PortList{&model.Port{
-			Name:     "tcp-port",
-			Port:     9000,
-			Protocol: protocol.TCP,
-		}},
-		Resolution: model.Passthrough,
-		Attributes: model.ServiceAttributes{
-			Name:            "foo.bar.com",
-			Namespace:       "testns",
-			ServiceRegistry: provider.External,
-			LabelSelectors:  map[string]string{"wl": "headless-foobar"},
-		},
-	}
+	}, "Kubernetes")[0]
 
 	wildcardService := &model.Service{
 		Hostname:       host.Name("*.testns.svc.cluster.local"),
@@ -159,28 +150,24 @@ func TestNameTable(t *testing.T) {
 		},
 	}
 
-	cidrService := &model.Service{
-		Hostname:       host.Name("*.testns.svc.cluster.local"),
-		DefaultAddress: "172.217.0.0/16",
-		Ports: model.PortList{
-			&model.Port{
-				Name:     "tcp-port",
-				Port:     9000,
-				Protocol: protocol.TCP,
-			},
-			&model.Port{
-				Name:     "http-port",
-				Port:     8000,
-				Protocol: protocol.HTTP,
+	cidrService := serviceentry.ConvertServices(config.Config{
+		Spec: &v1alpha3.ServiceEntry{
+			Hosts:     []string{"*.testns.svc.cluster.local"},
+			Addresses: []string{"172.217.0.0/16"},
+			Ports: []*v1alpha3.ServicePort{
+				{
+					Name:     "tcp-port",
+					Number:   9000,
+					Protocol: "TCP",
+				},
+				{
+					Name:     "http-port",
+					Number:   8000,
+					Protocol: "HTTP",
+				},
 			},
 		},
-		Resolution: model.ClientSideLB,
-		Attributes: model.ServiceAttributes{
-			Name:            "cidr-svc",
-			Namespace:       "testns",
-			ServiceRegistry: provider.Kubernetes,
-		},
-	}
+	}, "Kubernetes")
 
 	serviceWithVIP1 := &model.Service{
 		Hostname:       host.Name("mysql.foo.bar"),
@@ -248,7 +235,7 @@ func TestNameTable(t *testing.T) {
 
 	cpush := model.NewPushContext()
 	cpush.Mesh = mesh
-	cpush.AddPublicServices([]*model.Service{cidrService})
+	cpush.AddPublicServices(cidrService)
 
 	sepush := model.NewPushContext()
 	sepush.Mesh = mesh
