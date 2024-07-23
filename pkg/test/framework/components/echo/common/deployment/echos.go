@@ -196,7 +196,7 @@ func (c *Config) DefaultEchoConfigs(t resource.Context) []echo.Config {
 		Ports:          ports.All(),
 		Subsets: []echo.SubsetConfig{
 			{
-				Annotations: map[string]string{annotation.SidecarAgentLogLevel.Name: "dns:debug"},
+				Annotations: map[string]string{annotation.SidecarAgentLogLevel.Name: "dns:debug,dns-server:info"},
 			},
 		},
 		Locality:                "region.zone.subzone",

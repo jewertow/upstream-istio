@@ -15,6 +15,7 @@
 package server
 
 import (
+	istiolog "istio.io/istio/pkg/log"
 	"strings"
 
 	"istio.io/istio/pilot/pkg/model"
@@ -23,6 +24,8 @@ import (
 	dnsProto "istio.io/istio/pkg/dns/proto"
 	netutil "istio.io/istio/pkg/util/net"
 )
+
+var log = istiolog.RegisterScope("dns-server", "Istio DNS proxy")
 
 // Config for building the name table.
 type Config struct {
@@ -45,19 +48,22 @@ func BuildNameTable(cfg Config) *dnsProto.NameTable {
 		var addressList []string
 		hostName := svc.Hostname
 		headless := false
-		var svcAddresses []string
-		if svc.Attributes.ServiceRegistry == provider.Kubernetes {
-			svcAddresses = svc.GetAllAddressesForProxy(cfg.Node)
-		} else {
-			// Get all svc addresses for all clusters, e.g. ServiceEntry created in primary-remote deployment
-			// where primary(CLUSTER_ID=a) and remote(CLUSTER_ID=b).
-			svcAddresses = svc.GetAddresses(&model.Proxy{Metadata: &model.NodeMetadata{ClusterID: ""}})
-			// if a service has only one address, and it is 0.0.0.0, we must try to get an auto-allocated address
-			if len(svcAddresses) == 1 && svcAddresses[0] == constants.UnspecifiedIP {
-				svcAddresses = []string{svc.GetAddressForProxy(cfg.Node)}
-			}
-		}
-		for _, svcAddress := range svcAddresses {
+		log.Infof("service: %s", hostName)
+		for _, svcAddress := range svc.GetAllAddressesForProxy(cfg.Node) {
+			log.Infof("service %s address: %s", hostName, svcAddress)
+			//var svcAddresses []string
+			//if svc.Attributes.ServiceRegistry == provider.Kubernetes {
+			//	svcAddresses = svc.GetAllAddressesForProxy(cfg.Node)
+			//} else {
+			//	// Get all svc addresses for all clusters, e.g. ServiceEntry created in primary-remote deployment
+			//	// where primary(CLUSTER_ID=a) and remote(CLUSTER_ID=b).
+			//	svcAddresses = svc.GetAddresses(&model.Proxy{Metadata: &model.NodeMetadata{ClusterID: ""}})
+			//	// if a service has only one address, and it is 0.0.0.0, we must try to get an auto-allocated address
+			//	if len(svcAddresses) == 1 && svcAddresses[0] == constants.UnspecifiedIP {
+			//		svcAddresses = []string{svc.GetAddressForProxy(cfg.Node)}
+			//	}
+			//}
+			//for _, svcAddress := range svcAddresses {
 			if svcAddress == constants.UnspecifiedIP {
 				headless = true
 				break
