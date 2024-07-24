@@ -3513,7 +3513,7 @@ spec:
 		// because the ServiceEntry is not be created in a cluster where the control plane is not installed,
 		// and then function GetAllAddressesForProxy(remote) will return only the default address,
 		// because the created ServiceEntry is internally assigned to the primary cluster.
-		if len(client.Clusters().Remotes()) > 0 {
+		if client.Clusters().GetByName("remote") != nil {
 			expectedIPv4 = []string{"1.2.3.4"}
 			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234"}
 		}
