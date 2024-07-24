@@ -3509,11 +3509,12 @@ spec:
 			expectedIPv4 = []string{"1.2.3.4"}
 			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
 		}
-		// If a client is deployed in a remote cluster, it will resolve only the default address,
-		// because the ServiceEntry is not be created in a cluster where the control plane is not installed,
-		// and then function GetAllAddressesForProxy(remote) will return only the default address,
-		// because the created ServiceEntry is internally assigned to the primary cluster.
-		if client.Clusters().GetByName("remote") != nil {
+		// If a client is deployed in a remote cluster, which is not a config cluster, i.e. Istio resources
+		// are not created in that cluster, it will resolve only the default address, because the ServiceEntry
+		// created in this test is internally assigned to the config cluster, so function GetAllAddressesForProxy(remote),
+		// will only return the default address for that service.
+		remotes := client.Clusters().Remotes()
+		if len(remotes) > 0 && len(remotes.Configs()) == 0 {
 			expectedIPv4 = []string{"1.2.3.4"}
 			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234"}
 		}
