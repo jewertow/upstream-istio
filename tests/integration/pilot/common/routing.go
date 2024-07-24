@@ -43,6 +43,7 @@ import (
 	"istio.io/istio/pkg/http/headers"
 	echoClient "istio.io/istio/pkg/test/echo"
 	"istio.io/istio/pkg/test/echo/common/scheme"
+	"istio.io/istio/pkg/test/framework"
 	"istio.io/istio/pkg/test/framework/components/echo"
 	"istio.io/istio/pkg/test/framework/components/echo/check"
 	"istio.io/istio/pkg/test/framework/components/echo/common/deployment"
@@ -53,6 +54,7 @@ import (
 	"istio.io/istio/pkg/test/framework/components/istio/ingress"
 	"istio.io/istio/pkg/test/framework/label"
 	"istio.io/istio/pkg/test/scopes"
+	"istio.io/istio/pkg/test/util/assert"
 	"istio.io/istio/pkg/test/util/retry"
 	"istio.io/istio/pkg/test/util/tmpl"
 	"istio.io/istio/pkg/util/sets"
@@ -3491,6 +3493,23 @@ spec:
 	}
 	ipv4 := []string{"1.2.3.4", "1.2.3.5"}
 	ipv6 := []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
+
+	v4, v6 := getSupportedIPFamilies(t, t.Apps.A)
+	var expectedIPv4 []string
+	var expectedIPv6 []string
+	if v4 {
+		expectedIPv4 = []string{"1.2.3.4", "1.2.3.5"}
+		expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234"}
+	}
+	if v6 {
+		expectedIPv4 = []string{"1.2.3.4"}
+		expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
+	}
+	if v4 && v6 {
+		expectedIPv4 = []string{"1.2.3.4", "1.2.3.5"}
+		expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
+	}
+
 	dummyLocalhostServer := "127.0.0.1"
 	cases := []struct {
 		name     string
@@ -3503,25 +3522,25 @@ spec:
 		{
 			name:     "tcp ipv4",
 			ips:      ipv4,
-			expected: ipv4,
+			expected: expectedIPv4,
 			protocol: "tcp",
 		},
 		{
 			name:     "udp ipv4",
 			ips:      ipv4,
-			expected: ipv4,
+			expected: expectedIPv4,
 			protocol: "udp",
 		},
 		{
 			name:     "tcp ipv6",
 			ips:      ipv6,
-			expected: ipv6,
+			expected: expectedIPv6,
 			protocol: "tcp",
 		},
 		{
 			name:     "udp ipv6",
 			ips:      ipv6,
-			expected: ipv6,
+			expected: expectedIPv6,
 			protocol: "udp",
 		},
 		{
@@ -5118,4 +5137,20 @@ func createService(t TrafficContext, name, ns, appLabelValue string, instances i
 		}
 	}
 	return clusterIPs
+}
+
+func getSupportedIPFamilies(t framework.TestContext, instaces echo.Instances) (v4 bool, v6 bool) {
+	for _, a := range instaces.WorkloadsOrFail(t).Addresses() {
+		ip, err := netip.ParseAddr(a)
+		assert.NoError(t, err)
+		if ip.Is4() {
+			v4 = true
+		} else if ip.Is6() {
+			v6 = true
+		}
+	}
+	if !v4 && !v6 {
+		t.Fatalf("pod is neither v4 nor v6? %v", instaces.WorkloadsOrFail(t).Addresses())
+	}
+	return
 }
