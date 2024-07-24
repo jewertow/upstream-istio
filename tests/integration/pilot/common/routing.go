@@ -3493,78 +3493,83 @@ spec:
 	}
 	ipv4 := []string{"1.2.3.4", "1.2.3.5"}
 	ipv6 := []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
-
-	v4, v6 := getSupportedIPFamilies(t, t.Apps.A)
-	var expectedIPv4 []string
-	var expectedIPv6 []string
-	if v4 {
-		expectedIPv4 = []string{"1.2.3.4", "1.2.3.5"}
-		expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234"}
-	}
-	if v6 {
-		expectedIPv4 = []string{"1.2.3.4"}
-		expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
-	}
-	if v4 && v6 {
-		expectedIPv4 = []string{"1.2.3.4", "1.2.3.5"}
-		expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
-	}
-
 	dummyLocalhostServer := "127.0.0.1"
-	cases := []struct {
-		name     string
-		ips      []string
-		protocol string
-		server   string
-		skipCNI  bool
-		expected []string
-	}{
-		{
-			name:     "tcp ipv4",
-			ips:      ipv4,
-			expected: expectedIPv4,
-			protocol: "tcp",
-		},
-		{
-			name:     "udp ipv4",
-			ips:      ipv4,
-			expected: expectedIPv4,
-			protocol: "udp",
-		},
-		{
-			name:     "tcp ipv6",
-			ips:      ipv6,
-			expected: expectedIPv6,
-			protocol: "tcp",
-		},
-		{
-			name:     "udp ipv6",
-			ips:      ipv6,
-			expected: expectedIPv6,
-			protocol: "udp",
-		},
-		{
-			// We should only capture traffic to servers in /etc/resolv.conf nameservers
-			// This checks we do not capture traffic to other servers.
-			// This is important for cases like app -> istio dns server -> dnsmasq -> upstream
-			// If we captured all DNS traffic, we would loop dnsmasq traffic back to our server.
-			name:     "tcp localhost server",
-			ips:      ipv4,
-			expected: nil,
-			protocol: "tcp",
-			skipCNI:  true,
-			server:   dummyLocalhostServer,
-		},
-		{
-			name:     "udp localhost server",
-			ips:      ipv4,
-			expected: nil,
-			protocol: "udp",
-			skipCNI:  true,
-			server:   dummyLocalhostServer,
-		},
-	}
+
 	for _, client := range flatten(t.Apps.VM, t.Apps.A, t.Apps.Tproxy) {
+		v4, v6 := getSupportedIPFamilies(t, client)
+		var expectedIPv4 []string
+		var expectedIPv6 []string
+		if v4 && v6 {
+			expectedIPv4 = []string{"1.2.3.4", "1.2.3.5"}
+			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
+		} else if v4 {
+			expectedIPv4 = []string{"1.2.3.4", "1.2.3.5"}
+			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234"}
+		} else {
+			expectedIPv4 = []string{"1.2.3.4"}
+			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234", "1235:1235:1235::1235:1235:1235"}
+		}
+		// If a client is deployed in a remote cluster, it will resolve only the default address,
+		// because the ServiceEntry is not be created in a cluster where the control plane is not installed,
+		// and then function GetAllAddressesForProxy(remote) will return only the default address,
+		// because the created ServiceEntry is internally assigned to the primary cluster.
+		if len(client.Clusters().Remotes()) > 0 {
+			expectedIPv4 = []string{"1.2.3.4"}
+			expectedIPv6 = []string{"1234:1234:1234::1234:1234:1234"}
+		}
+		cases := []struct {
+			name     string
+			ips      []string
+			protocol string
+			server   string
+			skipCNI  bool
+			expected []string
+		}{
+			{
+				name:     "tcp ipv4",
+				ips:      ipv4,
+				expected: expectedIPv4,
+				protocol: "tcp",
+			},
+			{
+				name:     "udp ipv4",
+				ips:      ipv4,
+				expected: expectedIPv4,
+				protocol: "udp",
+			},
+			{
+				name:     "tcp ipv6",
+				ips:      ipv6,
+				expected: expectedIPv6,
+				protocol: "tcp",
+			},
+			{
+				name:     "udp ipv6",
+				ips:      ipv6,
+				expected: expectedIPv6,
+				protocol: "udp",
+			},
+			{
+				// We should only capture traffic to servers in /etc/resolv.conf nameservers
+				// This checks we do not capture traffic to other servers.
+				// This is important for cases like app -> istio dns server -> dnsmasq -> upstream
+				// If we captured all DNS traffic, we would loop dnsmasq traffic back to our server.
+				name:     "tcp localhost server",
+				ips:      ipv4,
+				expected: nil,
+				protocol: "tcp",
+				skipCNI:  true,
+				server:   dummyLocalhostServer,
+			},
+			{
+				name:     "udp localhost server",
+				ips:      ipv4,
+				expected: nil,
+				protocol: "udp",
+				skipCNI:  true,
+				server:   dummyLocalhostServer,
+			},
+		}
 		for _, tt := range cases {
 			if tt.skipCNI && t.Istio.Settings().EnableCNI {
 				continue
@@ -5139,8 +5144,8 @@ func createService(t TrafficContext, name, ns, appLabelValue string, instances i
 	return clusterIPs
 }
 
-func getSupportedIPFamilies(t framework.TestContext, instaces echo.Instances) (v4 bool, v6 bool) {
-	for _, a := range instaces.WorkloadsOrFail(t).Addresses() {
+func getSupportedIPFamilies(t framework.TestContext, instace echo.Instance) (v4 bool, v6 bool) {
+	for _, a := range instace.WorkloadsOrFail(t).Addresses() {
 		ip, err := netip.ParseAddr(a)
 		assert.NoError(t, err)
 		if ip.Is4() {
@@ -5150,7 +5155,7 @@ func getSupportedIPFamilies(t framework.TestContext, instaces echo.Instances) (v
 		}
 	}
 	if !v4 && !v6 {
-		t.Fatalf("pod is neither v4 nor v6? %v", instaces.WorkloadsOrFail(t).Addresses())
+		t.Fatalf("pod is neither v4 nor v6? %v", instace.WorkloadsOrFail(t).Addresses())
 	}
 	return
 }
