@@ -3482,7 +3482,7 @@ spec:
 {{ end }}
   resolution: STATIC
   endpoints:
-  - "10.0.0.1"
+  - address: "10.0.0.1"
   ports:
   - number: 80
     name: http
