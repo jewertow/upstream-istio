@@ -139,7 +139,7 @@ func ServiceToServiceEntry(svc *model.Service, proxy *model.Proxy) *config.Confi
 }
 
 // convertServices transforms a ServiceEntry config to a list of internal Service objects.
-func ConvertServices(cfg config.Config, clusterID cluster.ID) []*model.Service {
+func convertServices(cfg config.Config, clusterID cluster.ID) []*model.Service {
 	serviceEntry := cfg.Spec.(*networking.ServiceEntry)
 	// ShouldV2AutoAllocateIP already checks that there are no addresses in the spec however this is critical enough to likely be worth checking
 	// explicitly as well in case the logic changes. We never want to overwrite addresses in the spec if there are any
@@ -337,7 +337,7 @@ func (s *Controller) convertServiceEntryToInstances(cfg config.Config, services 
 		return nil
 	}
 	if services == nil {
-		services = ConvertServices(cfg, s.clusterID)
+		services = convertServices(cfg, s.clusterID)
 	}
 
 	endpointsNum := len(serviceEntry.Endpoints)
