@@ -191,14 +191,10 @@ func (c *Config) DefaultEchoConfigs(t resource.Context) []echo.Config {
 	}
 
 	a := echo.Config{
-		Service:        ASvc,
-		ServiceAccount: true,
-		Ports:          ports.All(),
-		Subsets: []echo.SubsetConfig{
-			{
-				Annotations: map[string]string{annotation.SidecarAgentLogLevel.Name: "dns:debug,dns-server:info"},
-			},
-		},
+		Service:                 ASvc,
+		ServiceAccount:          true,
+		Ports:                   ports.All(),
+		Subsets:                 []echo.SubsetConfig{{}},
 		Locality:                "region.zone.subzone",
 		IncludeExtAuthz:         c.IncludeExtAuthz,
 		DisableAutomountSAToken: disableAutomountSAToken,
@@ -259,7 +255,7 @@ func (c *Config) DefaultEchoConfigs(t resource.Context) []echo.Config {
 		ServiceAccount: true,
 		Ports:          ports.All(),
 		Subsets: []echo.SubsetConfig{{
-			Annotations: map[string]string{annotation.SidecarInterceptionMode.Name: "TPROXY", annotation.SidecarAgentLogLevel.Name: "dns:debug"},
+			Annotations: map[string]string{annotation.SidecarInterceptionMode.Name: "TPROXY"},
 			Labels: map[string]string{
 				constants.DataplaneModeLabel: constants.DataplaneModeNone,
 			},
@@ -268,16 +264,12 @@ func (c *Config) DefaultEchoConfigs(t resource.Context) []echo.Config {
 	}
 
 	vmSvc := echo.Config{
-		Service:        VMSvc,
-		ServiceAccount: true,
-		Ports:          ports.All(),
-		DeployAsVM:     true,
-		AutoRegisterVM: true,
-		Subsets: []echo.SubsetConfig{
-			{
-				Annotations: map[string]string{annotation.SidecarAgentLogLevel.Name: "dns:debug"},
-			},
-		},
+		Service:         VMSvc,
+		ServiceAccount:  true,
+		Ports:           ports.All(),
+		DeployAsVM:      true,
+		AutoRegisterVM:  true,
+		Subsets:         []echo.SubsetConfig{{}},
 		IncludeExtAuthz: c.IncludeExtAuthz,
 	}
 

@@ -3888,7 +3888,7 @@ spec:
 				Protocol:    protocol.HTTPS,
 				ServicePort: 443,
 			},
-			Check: check.Status(http.StatusMovedPermanently),
+			Check: check.Status(http.StatusOK),
 		},
 		call: t.Apps.A[0].CallOrFail,
 	})
