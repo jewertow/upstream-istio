@@ -3481,7 +3481,8 @@ spec:
   - "{{$ip}}"
 {{ end }}
   resolution: STATIC
-  endpoints: []
+  endpoints:
+  - "10.0.0.1"
   ports:
   - number: 80
     name: http
