@@ -44,13 +44,14 @@ func BuildNameTable(cfg Config) *dnsProto.NameTable {
 	out := &dnsProto.NameTable{
 		Table: make(map[string]*dnsProto.NameTable_NameInfo),
 	}
+	log.Infof("node: %s/%s", cfg.Node.ID, cfg.Node.Metadata.ClusterID)
 	for _, svc := range cfg.Node.SidecarScope.Services() {
 		var addressList []string
 		hostName := svc.Hostname
 		headless := false
 		log.Infof("service: %s", hostName)
 		for _, svcAddress := range svc.GetAllAddressesForProxy(cfg.Node) {
-			log.Infof("service %s address: %s", hostName, svcAddress)
+			log.Infof("address: %s [%s]", svcAddress, hostName)
 			//var svcAddresses []string
 			//if svc.Attributes.ServiceRegistry == provider.Kubernetes {
 			//	svcAddresses = svc.GetAllAddressesForProxy(cfg.Node)
@@ -66,6 +67,7 @@ func BuildNameTable(cfg Config) *dnsProto.NameTable {
 			//for _, svcAddress := range svcAddresses {
 			if svcAddress == constants.UnspecifiedIP {
 				headless = true
+				log.Infof("headless")
 				break
 			}
 			// Filter out things we cannot parse as IP. Generally this means CIDRs, as anything else
