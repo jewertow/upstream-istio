@@ -364,8 +364,10 @@ func newKube(ctx resource.Context, cfg Config) (Instance, error) {
 				watchLocalNamespace = true
 			}
 		}
-		if err := i.configureDirectAPIServerAccess(watchLocalNamespace); err != nil {
-			return nil, err
+		if !cfg.SkipConfiguringDirectAPIServerAccess {
+			if err := i.configureDirectAPIServerAccess(watchLocalNamespace); err != nil {
+				return nil, err
+			}
 		}
 	}
 

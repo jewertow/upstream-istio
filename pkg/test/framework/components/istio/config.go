@@ -206,6 +206,8 @@ type Config struct {
 	// upon installing Istio.
 	// This field should only be set when DeployIstio is false.
 	SharedMeshConfigName string
+
+	SkipConfiguringDirectAPIServerAccess bool
 }
 
 func (c *Config) OverridesYAML(s *resource.Settings) string {
