@@ -22,6 +22,8 @@ const (
 	// FIPS_140_2 compliance policy.
 	// nolint: revive, stylecheck
 	FIPS_140_2 = "fips-140-2"
+
+	POST_QUANTUM = "post-quantum"
 )
 
 // Define common security feature flags shared among the Istio components.
