@@ -757,6 +757,15 @@ func validateTrustDomainConfig(config *meshconfig.MeshConfig) (errs error) {
 	return
 }
 
+func ValidateMeshTLSConfig(mesh *meshconfig.MeshConfig) (errs error) {
+	if meshMTLS := mesh.MeshMTLS; meshMTLS != nil {
+		if meshMTLS.EcdhCurves != nil {
+			errs = multierror.Append(errs, errors.New("mesh TLS does not support ECDH curves configuration"))
+		}
+	}
+	return errs
+}
+
 func ValidateMeshTLSDefaults(mesh *meshconfig.MeshConfig) (v Validation) {
 	unrecognizedECDHCurves := sets.New[string]()
 	validECDHCurves := sets.New[string]()
@@ -809,6 +818,8 @@ func ValidateMeshConfig(mesh *meshconfig.MeshConfig) (Warning, error) {
 	if err := validateExtensionProvider(mesh); err != nil {
 		scope.Warnf("found invalid extension provider (can be ignored if the given extension provider is not used): %v", err)
 	}
+
+	v = AppendValidation(v, ValidateMeshTLSConfig(mesh))
 
 	v = AppendValidation(v, ValidateMeshTLSDefaults(mesh))
 
