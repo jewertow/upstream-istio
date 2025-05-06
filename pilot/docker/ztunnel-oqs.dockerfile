@@ -1,27 +1,11 @@
-# Define build arguments for version tags, installation paths, and configurations.
-#ARG ALPINE_VERSION=3.21
+FROM fedora:41
+
 ARG OPENSSL_TAG=openssl-3.4.0
 ARG LIBOQS_TAG=0.12.0
 ARG OQSPROVIDER_TAG=0.8.0
 ARG INSTALLDIR=/opt/oqssa
-
-# Specify supported signature and key encapsulation mechanisms (KEM) algorithms.
-ARG SIG_ALG="dilithium3"
-ARG DEFAULT_GROUPS="x25519:x448:kyber512:p256_kyber512:kyber768:p384_kyber768:kyber1024:p521_kyber1024"
-
-
-# Stage 1: Build - Compile and assemble all necessary components and dependencies.
-#FROM alpine:${ALPINE_VERSION} AS intermediate
-FROM fedora:41
-
-ARG OPENSSL_TAG
-ARG LIBOQS_TAG
-ARG OQSPROVIDER_TAG
-ARG INSTALLDIR
-ARG SIG_ALG
-ARG DEFAULT_GROUPS
-
-LABEL version="6"
+# Specify supported ey encapsulation mechanisms (KEM) algorithms.
+ARG DEFAULT_GROUPS="x25519:kyber768"
 
 # Install required build tools and system dependencies.
 RUN dnf -y update && dnf -y install \
