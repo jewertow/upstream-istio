@@ -23,7 +23,7 @@ const (
 	// nolint: revive, stylecheck
 	FIPS_140_2 = "fips-140-2"
 
-	POST_QUANTUM = "post-quantum"
+	FIPS_203 = "fips-203"
 )
 
 // Define common security feature flags shared among the Istio components.
@@ -36,6 +36,7 @@ settings, including in-mesh mTLS and external TLS. Valid values are:
 * 'fips-140-2' which enforces a version of the TLS protocol and a subset
 of cipher suites overriding any user preferences or defaults for all runtime
 components, including Envoy, gRPC Go SDK, and gRPC C++ SDK.
+* 'fips-203' which enforces post-quantum safe algorithm ML-KEM for key exchange.
 
 WARNING: Setting compliance policy in the control plane is a necessary but
 not a sufficient requirement to achieve compliance. There are additional
