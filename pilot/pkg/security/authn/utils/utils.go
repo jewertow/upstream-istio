@@ -79,9 +79,6 @@ func BuildInboundTLS(mTLSMode model.MutualTLSMode, node *model.Proxy,
 		TlsMinimumProtocolVersion: minTLSVersion,
 		TlsMaximumProtocolVersion: tls.TlsParameters_TLSv1_3,
 	}
-	if mc != nil && mc.MeshMTLS != nil && mc.MeshMTLS.EcdhCurves != nil {
-		ctx.CommonTlsContext.TlsParams.EcdhCurves = mc.MeshMTLS.EcdhCurves
-	}
 	authn_model.ApplyToCommonTLSContext(ctx.CommonTlsContext, node, []string{}, /*subjectAltNames*/
 		"", /*crl*/
 		trustDomainAliases, ctx.RequireClientCertificate.Value)
