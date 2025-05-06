@@ -66,9 +66,8 @@ func getTLSDialOption(opts *TLSOptions) (grpc.DialOption, error) {
 			}
 			return &certificate, nil
 		},
-		RootCAs:          rootCert,
-		MinVersion:       tls.VersionTLS12,
-		CurvePreferences: []tls.CurveID{tls.X25519MLKEM768},
+		RootCAs:    rootCert,
+		MinVersion: tls.VersionTLS12,
 	}
 
 	if host, _, err := net.SplitHostPort(opts.ServerAddress); err == nil {

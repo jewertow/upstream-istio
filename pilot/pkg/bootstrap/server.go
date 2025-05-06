@@ -782,9 +782,8 @@ func (s *Server) initSecureDiscoveryService(args *PilotArgs, trustDomain string)
 			}
 			return err
 		},
-		MinVersion:       tls.VersionTLS12,
-		CipherSuites:     args.ServerOptions.TLSOptions.CipherSuits,
-		CurvePreferences: []tls.CurveID{tls.X25519MLKEM768},
+		MinVersion:   tls.VersionTLS12,
+		CipherSuites: args.ServerOptions.TLSOptions.CipherSuits,
 	}
 	// Compliance for xDS server TLS.
 	sec_model.EnforceGoCompliance(cfg)
