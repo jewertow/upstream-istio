@@ -59,7 +59,7 @@ func EnforceGoCompliance(ctx *gotls.Config) {
 		ctx.CipherSuites = fipsGoCiphers
 		ctx.CurvePreferences = []gotls.CurveID{gotls.CurveP256}
 		return
-	case common_features.FIPS_203:
+	case common_features.POST_QUANTUM_SAFE_KX:
 		ctx.MinVersion = gotls.VersionTLS13
 		ctx.MaxVersion = gotls.VersionTLS13
 		ctx.CurvePreferences = []gotls.CurveID{gotls.X25519MLKEM768}
@@ -95,7 +95,7 @@ func EnforceCompliance(ctx *tls.CommonTlsContext) {
 		// Default (unset) is P-256
 		ctx.TlsParams.EcdhCurves = nil
 		return
-	case common_features.FIPS_203:
+	case common_features.POST_QUANTUM_SAFE_KX:
 		if ctx.TlsParams == nil {
 			ctx.TlsParams = &tls.TlsParameters{}
 		}
