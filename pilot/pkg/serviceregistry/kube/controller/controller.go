@@ -27,6 +27,7 @@ import (
 	klabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/yaml"
 
 	"istio.io/api/label"
 	"istio.io/istio/pilot/pkg/features"
@@ -203,6 +204,8 @@ type Controller struct {
 	// With this, we can populate mesh's gateway address with the node ips.
 	nodes kclient.Client[*v1.Node]
 
+	meshConfigs kclient.Client[*v1.ConfigMap]
+
 	exports serviceExportCache
 	imports serviceImportCache
 	pods    *PodCache
@@ -285,6 +288,14 @@ func NewController(kubeClient kubelib.Client, options Options) *Controller {
 	registerHandlers(c, c.services, "Services", c.onServiceEvent, nil)
 
 	c.endpoints = newEndpointSliceController(c)
+
+	// Watch the Istio ConfigMap (meshConfig) to access cluster-specific configuration like trustDomain
+	meshConfigMapName := getMeshConfigMapName(options.Revision)
+	c.meshConfigs = kclient.NewFiltered[*v1.ConfigMap](kubeClient, kclient.Filter{
+		Namespace:     options.SystemNamespace,
+		FieldSelector: "metadata.name=" + meshConfigMapName,
+	})
+	registerHandlers[*v1.ConfigMap](c, c.meshConfigs, "MeshConfigs", c.onMeshConfigEvent, nil)
 
 	// This is for getting the node IPs of a selected set of nodes
 	c.nodes = kclient.NewFiltered[*v1.Node](kubeClient, kclient.Filter{ObjectTransform: kubelib.StripNodeUnusedFields})
@@ -660,6 +671,7 @@ func (c *Controller) shutdownInformerHandlers() {
 	c.endpoints.slices.ShutdownHandlers()
 	c.pods.pods.ShutdownHandlers()
 	c.nodes.ShutdownHandlers()
+	c.meshConfigs.ShutdownHandlers()
 }
 
 func (c *Controller) informersSynced() bool {
@@ -668,6 +680,7 @@ func (c *Controller) informersSynced() bool {
 		c.endpoints.slices.HasSynced() &&
 		c.pods.pods.HasSynced() &&
 		c.nodes.HasSynced() &&
+		c.meshConfigs.HasSynced() &&
 		c.imports.HasSynced() &&
 		c.exports.HasSynced() &&
 		c.networkManager.HasSynced()
@@ -1019,6 +1032,29 @@ func (c *Controller) onSystemNamespaceEvent(_, ns *v1.Namespace, ev model.Event)
 	return nil
 }
 
+func (c *Controller) onMeshConfigEvent(_, cm *v1.ConfigMap, event model.Event) error {
+	if cm == nil {
+		return nil
+	}
+
+	meshConfigYAML, exists := cm.Data["mesh"]
+	if !exists {
+		log.Warnf("Mesh ConfigMap in cluster %s does not contain 'mesh' key", c.Cluster())
+		return nil
+	}
+
+	var meshConfig struct {
+		TrustDomain string `yaml:"trustDomain"`
+	}
+	if err := yaml.Unmarshal([]byte(meshConfigYAML), &meshConfig); err != nil {
+		log.Errorf("Failed to parse mesh config in cluster %s: %v", c.Cluster(), err)
+		return err
+	}
+
+	log.Infof("Mesh ConfigMap %s in cluster %s: trustDomain=%s", event, c.Cluster(), meshConfig.TrustDomain)
+	return nil
+}
+
 // isControllerForProxy should be used for proxies assumed to be in the kube cluster for this controller. Workload Entries
 // may not necessarily pass this check, but we still want to allow kube services to select workload instances.
 func (c *Controller) isControllerForProxy(proxy *model.Proxy) bool {
@@ -1249,4 +1285,12 @@ func serviceUpdateNeedsPush(prev, curr *v1.Service, preConv, currConv *model.Ser
 		}
 	}
 	return false
+}
+
+func getMeshConfigMapName(revision string) string {
+	name := "istio"
+	if revision == "" || revision == "default" {
+		return name
+	}
+	return name + "-" + revision
 }
