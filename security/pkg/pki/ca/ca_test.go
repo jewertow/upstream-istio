@@ -275,6 +275,129 @@ func TestCreateSelfSignedIstioCAWithSecret(t *testing.T) {
 	}
 }
 
+func TestCreateSelfSignedIstioCAWithExpiredSecret(t *testing.T) {
+	caCertTTL := time.Hour
+	defaultCertTTL := 30 * time.Minute
+	maxCertTTL := time.Hour
+	org := "test.ca.Org"
+	const caNamespace = "default"
+	rootCertFile := ""
+	rootCertCheckInverval := time.Hour
+	rsaKeySize := 2048
+
+	expiredCertOptions := util.CertOptions{
+		TTL:          time.Second,
+		NotBefore:    time.Now().Add(-2 * time.Second),
+		Org:          org,
+		IsCA:         true,
+		IsSelfSigned: true,
+		RSAKeySize:   rsaKeySize,
+	}
+	expiredCert, expiredKey, err := util.GenCertKeyFromOptions(expiredCertOptions)
+	if err != nil {
+		t.Fatalf("Failed to generate expired cert: %v", err)
+	}
+
+	client := fake.NewClientset()
+	initSecret := BuildSecret(CASecret, caNamespace, nil, nil, expiredCert, expiredCert, expiredKey, istioCASecretType)
+	_, err = client.CoreV1().Secrets(caNamespace).Create(context.TODO(), initSecret, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	caopts, err := NewSelfSignedIstioCAOptions(context.Background(),
+		0, caCertTTL, rootCertCheckInverval, defaultCertTTL,
+		maxCertTTL, org, false, false, caNamespace, client.CoreV1(),
+		rootCertFile, false, rsaKeySize)
+	if err != nil {
+		t.Fatalf("Expected self-signed CA to recover from expired cert, got error: %v", err)
+	}
+
+	ca, err := NewIstioCA(caopts)
+	if err != nil {
+		t.Fatalf("Failed to create IstioCA: %v", err)
+	}
+
+	signingCert, _, _, rootCertBytes := ca.GetCAKeyCertBundle().GetAll()
+	if signingCert == nil {
+		t.Fatal("Signing cert should not be nil after recovery")
+	}
+
+	rootCert, err := util.ParsePemEncodedCertificate(rootCertBytes)
+	if err != nil {
+		t.Fatalf("Failed to parse root cert: %v", err)
+	}
+
+	if ttl := rootCert.NotAfter.Sub(rootCert.NotBefore); ttl != caCertTTL {
+		t.Errorf("Expected regenerated cert TTL %v, got %v", caCertTTL, ttl)
+	}
+
+	updatedSecret, err := client.CoreV1().Secrets(caNamespace).Get(context.TODO(), CASecret, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated secret: %v", err)
+	}
+	if bytes.Equal(updatedSecret.Data[CACertFile], expiredCert) {
+		t.Error("Secret should contain regenerated cert, not the expired one")
+	}
+}
+
+func TestCreateSelfSignedIstioCAWithExpiredSecretAndUseCacertsEnabled(t *testing.T) {
+	caCertTTL := time.Hour
+	defaultCertTTL := 30 * time.Minute
+	maxCertTTL := time.Hour
+	org := "test.ca.Org"
+	const caNamespace = "default"
+	rootCertFile := ""
+	rootCertCheckInverval := time.Hour
+	rsaKeySize := 2048
+
+	expiredCertOptions := util.CertOptions{
+		TTL:          time.Second,
+		NotBefore:    time.Now().Add(-2 * time.Second),
+		Org:          org,
+		IsCA:         true,
+		IsSelfSigned: true,
+		RSAKeySize:   rsaKeySize,
+	}
+	expiredCert, expiredKey, err := util.GenCertKeyFromOptions(expiredCertOptions)
+	if err != nil {
+		t.Fatalf("Failed to generate expired cert: %v", err)
+	}
+
+	client := fake.NewClientset()
+	initSecret := BuildSecret(CACertsSecret, caNamespace, nil, nil, expiredCert, expiredCert, expiredKey, istioCASecretType)
+	_, err = client.CoreV1().Secrets(caNamespace).Create(context.TODO(), initSecret, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create secret: %v", err)
+	}
+
+	caopts, err := NewSelfSignedIstioCAOptions(context.Background(),
+		0, caCertTTL, rootCertCheckInverval, defaultCertTTL,
+		maxCertTTL, org, true, false, caNamespace, client.CoreV1(),
+		rootCertFile, false, rsaKeySize)
+	if err != nil {
+		t.Fatalf("Expected self-signed CA to recover from expired cert in cacerts, got error: %v", err)
+	}
+
+	ca, err := NewIstioCA(caopts)
+	if err != nil {
+		t.Fatalf("Failed to create IstioCA: %v", err)
+	}
+
+	signingCert, _, _, _ := ca.GetCAKeyCertBundle().GetAll()
+	if signingCert == nil {
+		t.Fatal("Signing cert should not be nil after recovery")
+	}
+
+	updatedSecret, err := client.CoreV1().Secrets(caNamespace).Get(context.TODO(), CACertsSecret, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get updated secret: %v", err)
+	}
+	if bytes.Equal(updatedSecret.Data[CACertFile], expiredCert) {
+		t.Error("Secret should contain regenerated cert, not the expired one")
+	}
+}
+
 func TestCreateSelfSignedIstioCAReadSigningCertOnly(t *testing.T) {
 	caCertTTL := time.Hour
 	defaultCertTTL := 30 * time.Minute

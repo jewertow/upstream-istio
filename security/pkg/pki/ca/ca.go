@@ -166,6 +166,9 @@ func NewSelfSignedIstioCAOptions(ctx context.Context,
 					return nil
 				} else if apierror.IsNotFound(err) { // if neither `istio-ca-secret` nor `cacerts` exists, we create a `cacerts`
 					// continue to create `cacerts`
+				} else if renewErr := renewExpiredSelfSignedCaSecret(client, namespace, caCertName, rootCertFile,
+					caCertTTL, org, dualUse, caRSAKeySize, caOpts); renewErr == nil {
+					return nil
 				} else {
 					return err
 				}
@@ -211,6 +214,9 @@ func NewSelfSignedIstioCAOptions(ctx context.Context,
 			}
 			pkiCaLog.Infof("Using self-generated public key: %v", string(rootCerts))
 			return nil
+		} else if renewErr := renewExpiredSelfSignedCaSecret(client, namespace, caCertName, rootCertFile,
+			caCertTTL, org, dualUse, caRSAKeySize, caOpts); renewErr == nil {
+			return nil
 		}
 		return err
 	})
@@ -239,6 +245,72 @@ func loadSelfSignedCaSecret(client corev1.CoreV1Interface, namespace string, caC
 		pkiCaLog.Infof("Using existing public key: %v", string(rootCerts))
 	}
 	return err
+}
+
+// renewExpiredSelfSignedCaSecret checks if the CA cert in the secret is expired,
+// and if so, regenerates it from the existing private key.
+func renewExpiredSelfSignedCaSecret(client corev1.CoreV1Interface, namespace, caCertName, rootCertFile string,
+	caCertTTL time.Duration, org string, dualUse bool, caRSAKeySize int, caOpts *IstioCAOptions,
+) error {
+	caSecret, err := client.Secrets(namespace).Get(context.TODO(), caCertName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	caCert := caSecret.Data[CACertFile]
+	caKey := caSecret.Data[CAPrivateKeyFile]
+	if len(caCert) == 0 || len(caKey) == 0 {
+		return fmt.Errorf("CA cert or key is missing in secret %s/%s", namespace, caCertName)
+	}
+
+	ttl, err := util.TimeBeforeCertExpires(caCert, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to check cert expiration: %v", err)
+	}
+	if ttl > 0 {
+		return fmt.Errorf("CA cert is not expired")
+	}
+
+	pkiCaLog.Infof("CA cert in %s/%s is expired, regenerating from existing key", namespace, caCertName)
+
+	oldCertOptions, err := util.GetCertOptionsFromExistingCert(caCert)
+	if err != nil {
+		pkiCaLog.Warnf("Failed to get cert options from existing cert (%v), using defaults", err)
+	}
+	options := util.CertOptions{
+		TTL:           caCertTTL,
+		SignerPrivPem: caKey,
+		Org:           org,
+		IsCA:          true,
+		IsSelfSigned:  true,
+		RSAKeySize:    caRSAKeySize,
+		IsDualUse:     dualUse,
+	}
+	options = util.MergeCertOptions(options, oldCertOptions)
+
+	pemCert, pemKey, err := util.GenRootCertFromExistingKey(options)
+	if err != nil {
+		return fmt.Errorf("unable to generate CA cert from existing key: %v", err)
+	}
+
+	rootCerts, err := util.AppendRootCerts(pemCert, rootCertFile)
+	if err != nil {
+		return fmt.Errorf("failed to append root certificates: %v", err)
+	}
+
+	if caOpts.KeyCertBundle, err = util.NewVerifiedKeyCertBundleFromPem(pemCert, pemKey, nil, rootCerts, nil); err != nil {
+		return fmt.Errorf("failed to create CA KeyCertBundle: %v", err)
+	}
+
+	caSecret.Data[CACertFile] = pemCert
+	caSecret.Data[CAPrivateKeyFile] = pemKey
+	caSecret.Data[RootCertFile] = pemCert
+	if _, err = client.Secrets(namespace).Update(context.TODO(), caSecret, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("failed to update CA secret: %v", err)
+	}
+
+	pkiCaLog.Infof("Regenerated expired CA cert from existing key: %v", string(rootCerts))
+	return nil
 }
 
 // NewSelfSignedDebugIstioCAOptions returns a new IstioCAOptions instance using self-signed certificate produced by in-memory CA,
