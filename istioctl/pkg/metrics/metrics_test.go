@@ -160,6 +160,10 @@ func (client mockPromAPI) Flags(ctx context.Context) (promv1.FlagsResult, error)
 	return nil, nil
 }
 
+func (client mockPromAPI) FormatQuery(ctx context.Context, query string) (string, error) {
+	return "", fmt.Errorf("TODO mockPromAPI doesn't mock FormatQuery")
+}
+
 func (client mockPromAPI) Query(ctx context.Context, query string, ts time.Time, opts ...promv1.Option) (prometheus_model.Value, promv1.Warnings, error) {
 	canned, ok := client.cannedResponse[query]
 	if !ok {
@@ -170,6 +174,10 @@ func (client mockPromAPI) Query(ctx context.Context, query string, ts time.Time,
 
 func (client mockPromAPI) TSDB(ctx context.Context, opts ...promv1.Option) (promv1.TSDBResult, error) {
 	return promv1.TSDBResult{}, nil
+}
+
+func (client mockPromAPI) TSDBBlocks(ctx context.Context) (promv1.TSDBBlocksResult, error) {
+	return promv1.TSDBBlocksResult{}, nil
 }
 
 func (client mockPromAPI) QueryRange(
